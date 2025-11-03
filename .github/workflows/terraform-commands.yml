@@ -1,0 +1,404 @@
+name: Terraform PR Commands
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  TERRAFORM_VERSION: "1.6.0"
+  AWS_REGION: us-east-1
+
+jobs:
+  # Parse the comment and determine which command to run
+  parse-command:
+    name: Parse Command
+    runs-on: ubuntu-latest
+    if: |
+      github.event.issue.pull_request &&
+      (contains(github.event.comment.body, 'terraform plan') ||
+       contains(github.event.comment.body, 'terraform apply') ||
+       contains(github.event.comment.body, 'terraform fmt'))
+    outputs:
+      command: ${{ steps.parse.outputs.command }}
+      directory: ${{ steps.parse.outputs.directory }}
+
+    steps:
+      - name: Parse Comment
+        id: parse
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const comment = context.payload.comment.body.toLowerCase();
+
+            // Extract command
+            let command = '';
+            if (comment.includes('terraform plan')) command = 'plan';
+            else if (comment.includes('terraform apply')) command = 'apply';
+            else if (comment.includes('terraform fmt')) command = 'fmt';
+
+            // Extract directory (optional)
+            let directory = 'all';
+            const dirMatch = comment.match(/(?:dir|directory)[:\s]+(\S+)/);
+            if (dirMatch) {
+              directory = dirMatch[1];
+            }
+
+            core.setOutput('command', command);
+            core.setOutput('directory', directory);
+
+            // React to comment to acknowledge
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes'
+            });
+
+  # Run terraform plan
+  terraform-plan:
+    name: Terraform Plan
+    needs: parse-command
+    if: needs.parse-command.outputs.command == 'plan'
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Run sequentially to avoid DynamoDB lock conflicts
+      max-parallel: 1
+      matrix:
+        directory:
+          # 00-backend-setup excluded - uses local state, run once manually
+          - 01-bootstrap
+          - 02-infrastructure
+
+    steps:
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            return pr.data.head.ref;
+
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        id: init
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: |
+          terraform plan -no-color -input=false -out=tfplan 2>&1 | tee plan.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Save Plan Output
+        if: always()
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: |
+          if [ -f plan.txt ]; then
+            if [ $(wc -c < plan.txt) -gt 60000 ]; then
+              head -c 60000 plan.txt > plan_truncated.txt
+              echo "" >> plan_truncated.txt
+              echo "... (output truncated)" >> plan_truncated.txt
+              mv plan_truncated.txt plan.txt
+            fi
+          fi
+
+      - name: Comment Plan Result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+            } catch (e) {
+              planOutput = 'Could not read plan output';
+            }
+
+            const success = '${{ steps.plan.outcome }}' === 'success';
+            const icon = success ? '✅' : '❌';
+
+            const output = `#### Terraform Plan: \`${{ matrix.directory }}\` ${icon}
+
+            **Triggered by**: @${{ github.event.comment.user.login }} via PR comment
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${planOutput}
+            \`\`\`
+
+            </details>
+
+            ${success ? '' : '**Action Required**: Fix the errors above before applying.'}
+
+            *Workflow: \`${{ github.workflow }}\`*`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  # Run terraform apply
+  terraform-apply:
+    name: Terraform Apply
+    needs: parse-command
+    if: needs.parse-command.outputs.command == 'apply'
+    runs-on: ubuntu-latest
+
+    strategy:
+      # Apply sequentially to avoid conflicts
+      max-parallel: 1
+      matrix:
+        directory:
+          # 00-backend-setup excluded - uses local state, run once manually
+          - 01-bootstrap
+          - 02-infrastructure
+
+    steps:
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            return pr.data.head.ref;
+
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        id: init
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: |
+          terraform plan -no-color -input=false -out=tfplan 2>&1 | tee plan.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Terraform Apply
+        id: apply
+        if: steps.plan.outcome == 'success'
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: |
+          terraform apply -auto-approve -input=false tfplan 2>&1 | tee apply.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Comment Apply Result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let applyOutput = '';
+            try {
+              applyOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/apply.txt', 'utf8');
+            } catch (e) {
+              applyOutput = 'Apply did not run or output not available';
+            }
+
+            const success = '${{ steps.apply.outcome }}' === 'success';
+            const icon = success ? '✅' : '❌';
+
+            // Truncate if too long
+            if (applyOutput.length > 60000) {
+              applyOutput = applyOutput.substring(0, 60000) + '\n... (output truncated)';
+            }
+
+            const output = `#### Terraform Apply: \`${{ matrix.directory }}\` ${icon}
+
+            **Triggered by**: @${{ github.event.comment.user.login }} via PR comment
+            **Status**: ${success ? 'Successfully applied' : 'Apply FAILED'}
+
+            <details><summary>Show Apply Output</summary>
+
+            \`\`\`terraform
+            ${applyOutput}
+            \`\`\`
+
+            </details>
+
+            ${success ? '' : '**Action Required**: Manual intervention needed.'}
+
+            *Workflow: \`${{ github.workflow }}\`*`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: React to Comment - Success
+        if: steps.apply.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });
+
+      - name: React to Comment - Failure
+        if: steps.apply.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'confused'
+            });
+
+      - name: Fail Workflow on Apply Failure
+        if: steps.apply.outcome == 'failure'
+        run: |
+          echo "::error::Terraform apply failed for ${{ matrix.directory }}"
+          exit 1
+
+  # Run terraform fmt
+  terraform-fmt:
+    name: Terraform Format
+    needs: parse-command
+    if: needs.parse-command.outputs.command == 'fmt'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get PR Details
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+            core.setOutput('ref', pr.data.head.ref);
+            return pr.data.head.ref;
+
+      - name: Checkout PR Branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Terraform Format
+        id: fmt
+        working-directory: infrastructure/terraform/ci-cd
+        run: |
+          terraform fmt -recursive 2>&1 | tee fmt.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      - name: Commit Changes
+        id: commit
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          if [[ -n $(git status -s) ]]; then
+            git add infrastructure/terraform/remote-state/
+            git commit -m "terraform fmt: Auto-format Terraform files"
+            git push
+            echo "changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment Format Result
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const hasChanges = '${{ steps.commit.outputs.changes }}' === 'true';
+
+            const output = hasChanges
+              ? `#### Terraform Format ✅\n\n**Triggered by**: @${{ github.event.comment.user.login }}\n\nFormatted Terraform files and pushed changes to this PR.`
+              : `#### Terraform Format ℹ️\n\n**Triggered by**: @${{ github.event.comment.user.login }}\n\nAll Terraform files are already formatted correctly.`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'rocket'
+            });

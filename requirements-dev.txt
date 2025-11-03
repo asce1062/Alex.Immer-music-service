@@ -1,0 +1,40 @@
+# ==============================================================================
+# Music Service - Development Dependencies
+# ==============================================================================
+# ⚠️  DEPRECATED: This file is maintained for backward compatibility only.
+#
+# 🎯 RECOMMENDED: Install using pyproject.toml instead:
+#     pip install -e ".[dev]"
+#
+# Source of truth: pyproject.toml [project.optional-dependencies.dev]
+# This file will be removed in a future version.
+# ==============================================================================
+
+-r requirements.txt
+
+# Testing
+pytest>=8.0.0  # v8+ no longer depends on deprecated 'py' package
+pytest-cov>=4.1.0
+moto[s3]>=4.2.0
+
+# Formatting
+black>=23.0.0
+isort>=5.12.0
+
+# Linting
+ruff>=0.1.0
+
+# Type Checking
+mypy>=1.5.0
+pyright>=1.1.350
+types-PyYAML
+types-Pillow
+boto3-stubs[s3]>=1.35.0
+
+# Security & Quality
+bandit>=1.7.5
+vulture>=2.10
+interrogate>=1.5.0
+
+# Pre-commit
+pre-commit>=3.5.0

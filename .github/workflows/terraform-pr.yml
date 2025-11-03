@@ -1,0 +1,336 @@
+name: Terraform PR Automation
+
+on:
+  pull_request:
+    paths:
+      - "infrastructure/terraform/remote-state/**"
+      - ".github/workflows/terraform-*.yml"
+    branches:
+      - main
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  TERRAFORM_VERSION: "1.6.0"
+  AWS_REGION: us-east-1
+
+jobs:
+  # Job 1: Automatic plan on PR open/update
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, 'terraform plan'))
+
+    strategy:
+      # Run sequentially to avoid DynamoDB lock conflicts
+      max-parallel: 1
+      matrix:
+        directory:
+          # 00-backend-setup excluded - uses local state, run once manually
+          - 01-bootstrap
+          - 02-infrastructure
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.event.issue.pull_request.head.ref }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Format Check
+        id: fmt
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: terraform fmt -check -recursive
+        continue-on-error: true
+
+      - name: Terraform Init
+        id: init
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        id: validate
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: |
+          terraform plan -no-color -input=false -out=tfplan 2>&1 | tee plan.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Save Plan Output
+        id: plan-output
+        if: always()
+        working-directory: infrastructure/terraform/remote-state/${{ matrix.directory }}
+        run: |
+          if [ -f plan.txt ]; then
+            # Truncate if too long (GitHub comment limit)
+            if [ $(wc -c < plan.txt) -gt 60000 ]; then
+              head -c 60000 plan.txt > plan_truncated.txt
+              echo "" >> plan_truncated.txt
+              echo "... (output truncated)" >> plan_truncated.txt
+              mv plan_truncated.txt plan.txt
+            fi
+            cat plan.txt
+          fi
+
+      - name: Comment PR - Success
+        if: steps.plan.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+
+            const output = `#### Terraform Plan: \`${{ matrix.directory }}\` ✅
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`terraform
+            ${planOutput}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Comment PR - Failure
+        if: steps.plan.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let planOutput = '';
+            try {
+              planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+            } catch (e) {
+              planOutput = 'Could not read plan output';
+            }
+
+            const output = `#### Terraform Plan: \`${{ matrix.directory }}\` ❌
+
+            <details><summary>Show Error</summary>
+
+            \`\`\`
+            ${planOutput}
+            \`\`\`
+
+            </details>
+
+            **Action Required**: Fix the errors above before merging.
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Upload Plan Artifact
+        if: steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ matrix.directory }}-${{ github.event.pull_request.number || github.event.issue.number }}
+          path: infrastructure/terraform/remote-state/${{ matrix.directory }}/tfplan
+          retention-days: 5
+
+      - name: Fail if Plan Failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  # Job 2: Lint and Security Scan
+  terraform-lint:
+    name: Terraform Lint & Security
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: TFLint Setup
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: TFLint Init
+        working-directory: infrastructure/terraform/ci-cd
+        run: tflint --init
+
+      - name: TFLint Run
+        working-directory: infrastructure/terraform/ci-cd
+        run: |
+          echo "## TFLint Results" > tflint-results.txt
+          # 00-backend-setup excluded - uses local state, run once manually
+          for dir in 01-bootstrap 02-infrastructure; do
+            if [ -d "$dir" ] && [ -f "$dir/main.tf" ]; then
+              echo "### Directory: $dir" >> tflint-results.txt
+              cd "$dir"
+              tflint --format compact >> ../tflint-results.txt 2>&1 || true
+              cd - > /dev/null
+            fi
+          done
+          cat tflint-results.txt
+
+      - name: Checkov Security Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infrastructure/terraform/remote-state/
+          framework: terraform
+          output_format: cli
+          soft_fail: true
+          download_external_modules: true
+
+      - name: Comment Lint Results
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let lintOutput = 'No lint results available';
+            try {
+              lintOutput = fs.readFileSync('infrastructure/terraform/remote-state/tflint-results.txt', 'utf8');
+            } catch (e) {
+              // File might not exist
+            }
+
+            const output = `#### Terraform Lint Results 📝
+
+            <details><summary>Show Lint Results</summary>
+
+            \`\`\`
+            ${lintOutput}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  # Job 3: Cost Estimation (optional)
+  terraform-cost:
+    name: Terraform Cost Estimate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Infracost Setup
+        uses: infracost/actions/setup@v3
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost Estimate
+        id: infracost
+        run: |
+          cd infrastructure/terraform/remote-state
+
+          # Initialize and generate plan for main infrastructure
+          cd 02-infrastructure
+          terraform init -input=false
+          terraform plan -out=tfplan.binary
+          terraform show -json tfplan.binary > plan.json
+
+          # Run Infracost
+          infracost breakdown --path plan.json \
+            --format json \
+            --out-file /tmp/infracost.json || echo "Infracost failed"
+
+          cd ../../..
+        continue-on-error: true
+
+      - name: Comment Cost Estimate
+        if: steps.infracost.outcome == 'success'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let costOutput = 'Cost estimation not available';
+            try {
+              const costData = JSON.parse(fs.readFileSync('/tmp/infracost.json', 'utf8'));
+              costOutput = JSON.stringify(costData, null, 2);
+            } catch (e) {
+              // File might not exist
+            }
+
+            const output = `#### Terraform Cost Estimate 💰
+
+            <details><summary>Show Cost Breakdown</summary>
+
+            \`\`\`json
+            ${costOutput}
+            \`\`\`
+
+            </details>
+
+            *Note: Cost estimates are approximate. Actual costs may vary.*
+
+            *Pusher: @${{ github.actor }}, Workflow: \`${{ github.workflow }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });

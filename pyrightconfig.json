@@ -1,0 +1,25 @@
+{
+  "include": ["scripts"],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.venv",
+    "**/venv",
+    "**/.mypy_cache",
+    "**/.pytest_cache",
+    "**/dist",
+    "**/build"
+  ],
+  "typeCheckingMode": "strict",
+  "reportUnknownMemberType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownLambdaType": "none",
+  "reportImplicitStringConcatenation": "none",
+  "reportAttributeAccessIssue": "warning",
+  "reportArgumentType": "none",
+  "reportMissingTypeStubs": "none",
+  "reportUnreachable": "none",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Darwin"
+}
