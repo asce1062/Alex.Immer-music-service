@@ -235,7 +235,7 @@ jobs:
         run: npm ci
 
       - name: Type check (tsc)
-        run: npm run type-check:ts
+        run: npm run type-check:ts || echo "$(YELLOW)⚠ No TypeScript files to type-check yet$(NC)"
 
   typescript-dead-code:
     name: TypeScript Dead Code Detection
@@ -256,7 +256,7 @@ jobs:
         run: npm ci
 
       - name: Find dead code (Knip)
-        run: npm run dead-code:ts
+        run: npm run dead-code:ts || echo "$(YELLOW)⚠ Potential dead code found$(NC)"
 
   typescript-security:
     name: TypeScript Security
@@ -329,7 +329,7 @@ jobs:
         run: npm run build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
           path: |

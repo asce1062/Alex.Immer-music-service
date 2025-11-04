@@ -354,10 +354,10 @@ def extract_mp3_metadata(
             if is_extra:
                 # File is in Extras subdirectory
                 albums_path = (
-                    f"albums/{quote(album_name)}/Extras/tracker/" f"{quote(tracker_path.name)}"
+                    f"albums/{quote(album_name)}/Extras/tracker/{quote(tracker_path.name)}"
                 )
                 tracker_path_str = (
-                    f"tracker/albums/{quote(album_name)}/Extras/" f"{quote(tracker_path.name)}"
+                    f"tracker/albums/{quote(album_name)}/Extras/{quote(tracker_path.name)}"
                 )
             else:
                 # File is in album root
@@ -481,11 +481,9 @@ def extract_tracker_metadata(
     if album_name and album_name != "unreleased":
         # Released album tracker - dual paths
         if is_extra:
-            albums_path = (
-                f"albums/{quote(album_name)}/Extras/tracker/" f"{quote(tracker_path.name)}"
-            )
+            albums_path = f"albums/{quote(album_name)}/Extras/tracker/{quote(tracker_path.name)}"
             tracker_path_str = (
-                f"tracker/albums/{quote(album_name)}/Extras/" f"{quote(tracker_path.name)}"
+                f"tracker/albums/{quote(album_name)}/Extras/{quote(tracker_path.name)}"
             )
         else:
             albums_path = f"albums/{quote(album_name)}/tracker/{quote(tracker_path.name)}"
@@ -525,8 +523,7 @@ def extract_tracker_metadata(
     elif album_name and album_name != "unreleased":
         # Unreleased but album-associated (backwards compatibility)
         metadata["complete_name"] = (
-            f"{config.cdn_base}/tracker/unreleased/{quote(album_name)}/"
-            f"{quote(tracker_path.name)}"
+            f"{config.cdn_base}/tracker/unreleased/{quote(album_name)}/{quote(tracker_path.name)}"
         )
     else:
         # Standalone unreleased (backwards compatibility)

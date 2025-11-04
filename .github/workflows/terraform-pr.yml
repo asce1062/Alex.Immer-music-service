@@ -193,11 +193,11 @@ jobs:
           tflint_version: latest
 
       - name: TFLint Init
-        working-directory: infrastructure/terraform/ci-cd
+        working-directory: infrastructure/terraform/remote-state
         run: tflint --init
 
       - name: TFLint Run
-        working-directory: infrastructure/terraform/ci-cd
+        working-directory: infrastructure/terraform/remote-state
         run: |
           echo "## TFLint Results" > tflint-results.txt
           # 00-backend-setup excluded - uses local state, run once manually

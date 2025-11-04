@@ -26,7 +26,8 @@
     "**/scripts/**",
     "**/Music/**",
     "**/__pycache__/**",
-    "*.config.{js,mjs,ts}"
+    "*.config.{js,mjs,ts}",
+    "infrastructure/terraform/remote-state/02-infrastructure/cloudfront-function.js"
   ],
   "ignoreDependencies": ["@types/node", "typescript", "prettier", "eslint", "vitest", "turbo"],
   "ignoreExportsUsedInFile": true,

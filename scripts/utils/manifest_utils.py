@@ -371,10 +371,10 @@ def build_master_manifest(
             "graphql_entrypoint": "https://api.aleximmer.me/graphql",
             "examples": {
                 "album_query": (
-                    '{ album(id: "8bit-seduction") ' "{ title year tracks { title duration } } }"
+                    '{ album(id: "8bit-seduction") { title year tracks { title duration } } }'
                 ),
                 "track_query": (
-                    '{ track(id: "8bit-seduction-01-the-day-they-landed") ' "{ title bpm url } }"
+                    '{ track(id: "8bit-seduction-01-the-day-they-landed") { title bpm url } }'
                 ),
             },
         },
