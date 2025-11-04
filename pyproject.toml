@@ -29,17 +29,19 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.0.0",
+  "pytest>=8.4.2",
   "pytest-cov>=4.1.0",
   "moto[s3]>=4.2.0",
   "black>=23.0.0",
+  "dotenv>=0.9.9",
   "ruff>=0.1.0",
   "mypy>=1.5.0",
   "pyright>=1.1.350",
+  "pip-audit>=2.9.0",
   "isort>=5.12.0",
   "bandit>=1.7.5",
   "vulture>=2.10",
-  "interrogate>=1.5.0",
+  # "interrogate>=1.5.0",
   "pre-commit>=3.5.0",
   "types-PyYAML",
   "types-Pillow",

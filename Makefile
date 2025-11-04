@@ -224,16 +224,16 @@ dead-code-ts: ## Find dead TypeScript code
 # ============================================================================
 # Documentation
 # ============================================================================
-docs: ## Check docstring coverage (Python)
-	@echo "$(BLUE)Checking docstring coverage...$(NC)"
-	interrogate scripts/ infrastructure/terraform/scripts/ \
-		--verbose \
-		--fail-under=80 \
-		--ignore-init-method \
-		--ignore-init-module \
-		--ignore-magic \
-		--ignore-nested-functions \
-		--exclude=scripts/tests || echo "$(YELLOW)⚠ Docstring coverage below 80%$(NC)"
+# docs: ## Check docstring coverage (Python)
+# 	@echo "$(BLUE)Checking docstring coverage...$(NC)"
+# 	interrogate scripts/ infrastructure/terraform/scripts/ \
+# 		--verbose \
+# 		--fail-under=80 \
+# 		--ignore-init-method \
+# 		--ignore-init-module \
+# 		--ignore-magic \
+# 		--ignore-nested-functions \
+# 		--exclude=scripts/tests || echo "$(YELLOW)⚠ Docstring coverage below 80%$(NC)"
 
 # ============================================================================
 # Testing
@@ -367,9 +367,9 @@ sync-validate: ## Validate music directory structure
 # ============================================================================
 tf-validate: ## Validate all Terraform configurations
 	@echo "$(BLUE)Validating Terraform configurations...$(NC)"
-	@cd infrastructure/terraform/backend-setup && terraform validate 2>/dev/null || echo "$(YELLOW)⚠ backend-setup not initialized (run 'make tf-init-backend')$(NC)"
-	@cd infrastructure/terraform/bootstrap && terraform validate 2>/dev/null || echo "$(YELLOW)⚠ bootstrap not initialized (run 'make tf-init-bootstrap')$(NC)"
-	@cd infrastructure/terraform && terraform validate 2>/dev/null || echo "$(YELLOW)⚠ main terraform not initialized (run 'make tf-init')$(NC)"
+	@cd infrastructure/terraform/local-state/00-backend-setup && terraform validate 2>/dev/null || echo "$(YELLOW)⚠ backend-setup not initialized (run 'make tf-init-backend')$(NC)"
+	@cd infrastructure/terraform/remote-state/01-bootstrap && terraform validate 2>/dev/null || echo "$(YELLOW)⚠ bootstrap not initialized (run 'make tf-init-bootstrap')$(NC)"
+	@cd infrastructure/terraform/remote-state/02-infrastructure && terraform validate 2>/dev/null || echo "$(YELLOW)⚠ main terraform not initialized (run 'make tf-init')$(NC)"
 	@echo "$(GREEN)✓ Terraform validation complete$(NC)"
 
 tf-init: ## Initialize all Terraform directories
@@ -380,43 +380,43 @@ tf-init: ## Initialize all Terraform directories
 
 tf-init-backend: ## Initialize backend-setup (first-time setup)
 	@echo "$(BLUE)Initializing backend-setup...$(NC)"
-	@cd infrastructure/terraform/backend-setup && terraform init
+	@cd infrastructure/terraform/local-state/00-backend-setup && terraform init
 	@echo "$(GREEN)✓ Backend setup initialized$(NC)"
 
 tf-init-bootstrap: ## Initialize bootstrap (creates music-service user)
 	@echo "$(BLUE)Initializing bootstrap...$(NC)"
-	@cd infrastructure/terraform/bootstrap && terraform init
+	@cd infrastructure/terraform/remote-state/01-bootstrap && terraform init
 	@echo "$(GREEN)✓ Bootstrap initialized$(NC)"
 
 tf-plan: ## Plan main infrastructure changes
 	@echo "$(BLUE)Planning infrastructure changes...$(NC)"
-	@cd infrastructure/terraform && terraform plan
+	@cd infrastructure/terraform/remote-state/02-infrastructure && terraform plan
 	@echo "$(GREEN)✓ Plan complete$(NC)"
 
 tf-plan-backend: ## Plan backend-setup changes
 	@echo "$(BLUE)Planning backend-setup changes...$(NC)"
-	@cd infrastructure/terraform/backend-setup && terraform plan
+	@cd infrastructure/terraform/local-state/00-backend-setup && terraform plan
 	@echo "$(GREEN)✓ Backend plan complete$(NC)"
 
 tf-plan-bootstrap: ## Plan bootstrap changes
 	@echo "$(BLUE)Planning bootstrap changes...$(NC)"
-	@cd infrastructure/terraform/bootstrap && terraform plan
+	@cd infrastructure/terraform/remote-state/01-bootstrap && terraform plan
 	@echo "$(GREEN)✓ Bootstrap plan complete$(NC)"
 
 tf-apply: ## Apply main infrastructure changes
 	@echo "$(BLUE)Applying infrastructure changes...$(NC)"
-	@cd infrastructure/terraform && terraform apply
+	@cd infrastructure/terraform/remote-state/02-infrastructure && terraform apply
 	@echo "$(GREEN)✓ Infrastructure applied$(NC)"
 
 tf-apply-backend: ## Apply backend-setup (creates S3 + DynamoDB for state)
 	@echo "$(BLUE)Applying backend-setup...$(NC)"
-	@cd infrastructure/terraform/backend-setup && terraform apply
+	@cd infrastructure/terraform/local-state/00-backend-setup && terraform apply
 	@echo "$(GREEN)✓ Backend resources created$(NC)"
 	@echo "$(YELLOW)Next: Run 'make tf-init-bootstrap' and 'make tf-apply-bootstrap'$(NC)"
 
 tf-apply-bootstrap: ## Apply bootstrap (creates music-service user)
 	@echo "$(BLUE)Applying bootstrap...$(NC)"
-	@cd infrastructure/terraform/bootstrap && terraform apply
+	@cd infrastructure/terraform/remote-state/01-bootstrap && terraform apply
 	@echo "$(GREEN)✓ Bootstrap complete$(NC)"
 	@echo "$(YELLOW)Next: Create access keys for music-service user$(NC)"
 

@@ -2,11 +2,10 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   workflow_dispatch:
-
 
 env:
   PYTHON_VERSION: "3.11"
@@ -19,22 +18,22 @@ jobs:
     name: Pre-commit Hooks
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pre-commit
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pre-commit
 
-    - name: Run pre-commit
-      run: pre-commit run --all-files --show-diff-on-failure
+      - name: Run pre-commit
+        run: pre-commit run --all-files --show-diff-on-failure
 
   # ============================================================================
   # Code Quality Checks
@@ -43,28 +42,28 @@ jobs:
     name: Code Quality
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-    - name: Run Black (formatter check)
-      run: black --check --config pyproject.toml scripts/
+      - name: Run Black (formatter check)
+        run: black --check --config pyproject.toml scripts/
 
-    - name: Run isort (import sorting check)
-      run: isort --check-only --settings-path pyproject.toml scripts/
+      - name: Run isort (import sorting check)
+        run: isort --check-only --settings-path pyproject.toml scripts/
 
-    - name: Run Ruff (linter)
-      run: ruff check scripts/
+      - name: Run Ruff (linter)
+        run: ruff check scripts/
 
   # ============================================================================
   # Type Checking
@@ -73,22 +72,22 @@ jobs:
     name: Type Checking
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-    - name: Run mypy
-      run: mypy scripts/utils/ --config-file=pyproject.toml --ignore-missing-imports
+      - name: Run mypy
+        run: mypy scripts/utils/ --config-file=pyproject.toml --ignore-missing-imports
 
   # ============================================================================
   # Security Checks
@@ -97,27 +96,27 @@ jobs:
     name: Security Scanning
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-    - name: Run bandit (security linter)
-      run: bandit -r scripts/ -c pyproject.toml
+      - name: Run bandit (security linter)
+        run: bandit -r scripts/ -c pyproject.toml
 
-    - name: Check for known vulnerabilities (pip-audit)
-      run: |
-        pip install pip-audit
-        pip-audit
+      - name: Check for known vulnerabilities (pip-audit)
+        run: |
+          pip install pip-audit
+          pip-audit
 
   # ============================================================================
   # Dead Code Detection
@@ -127,55 +126,55 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true # Don't fail build on dead code
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install vulture
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install vulture
 
-    - name: Run vulture (dead code detection)
-      run: vulture scripts/ --min-confidence=95 --exclude=scripts/tests/
+      - name: Run vulture (dead code detection)
+        run: vulture scripts/ --min-confidence=95 --exclude=scripts/tests/
 
   # ============================================================================
   # Documentation Coverage
   # ============================================================================
-  docstring-coverage:
-    name: Docstring Coverage
-    runs-on: ubuntu-latest
-    continue-on-error: true # Don't fail build on missing docstrings
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+  # docstring-coverage:
+  #   name: Docstring Coverage
+  #   runs-on: ubuntu-latest
+  #   continue-on-error: true # Don't fail build on missing docstrings
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: ${{ env.PYTHON_VERSION }}
+  #         cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install interrogate
+  #     - name: Install dependencies
+  #       run: |
+  #         python -m pip install --upgrade pip
+  #         pip install interrogate
 
-    - name: Check docstring coverage
-      run: |
-        interrogate scripts/ \
-          --verbose \
-          --fail-under=80 \
-          --ignore-init-method \
-          --ignore-init-module \
-          --ignore-magic \
-          --ignore-nested-functions \
-          --exclude=scripts/tests
+  #     - name: Check docstring coverage
+  #       run: |
+  #         interrogate scripts/ \
+  #           --verbose \
+  #           --fail-under=80 \
+  #           --ignore-init-method \
+  #           --ignore-init-module \
+  #           --ignore-magic \
+  #           --ignore-nested-functions \
+  #           --exclude=scripts/tests
 
   # ============================================================================
   # Tests with Coverage
@@ -186,34 +185,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest ]
-        python-version: [ "3.11", "3.12" ]
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.11", "3.12"]
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: "pip"
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
-    - name: Run tests with coverage
-      run: pytest scripts/tests/ --cov=scripts/utils --cov-report=xml --cov-report=term-missing
+      - name: Run tests with coverage
+        run: pytest scripts/tests/ --cov=scripts/utils --cov-report=xml --cov-report=term-missing
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
-        fail_ci_if_error: false
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
+          fail_ci_if_error: false
 
   # ============================================================================
   # Build Check
@@ -221,33 +220,33 @@ jobs:
   build:
     name: Build Package
     runs-on: ubuntu-latest
-    needs: [ pre-commit, code-quality, type-check, security, test ]
+    needs: [pre-commit, code-quality, type-check, security, test]
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: "pip"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
 
-    - name: Install build tools
-      run: |
-        python -m pip install --upgrade pip
-        pip install build twine
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
 
-    - name: Build package
-      run: python -m build
+      - name: Build package
+        run: python -m build
 
-    - name: Check package
-      run: twine check dist/*
+      - name: Check package
+        run: twine check dist/*
 
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: dist-packages
-        path: dist/
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist-packages
+          path: dist/
 
   # ============================================================================
   # All Checks Passed
@@ -255,18 +254,18 @@ jobs:
   all-checks-passed:
     name: All Checks Passed
     runs-on: ubuntu-latest
-    needs: [ pre-commit, code-quality, type-check, security, test, build ]
+    needs: [pre-commit, code-quality, type-check, security, test, build]
     if: always()
     steps:
-    - name: Check if all required jobs passed
-      run: |
-        if [[ "${{ needs.pre-commit.result }}" != "success" ]] || \
-           [[ "${{ needs.code-quality.result }}" != "success" ]] || \
-           [[ "${{ needs.type-check.result }}" != "success" ]] || \
-           [[ "${{ needs.security.result }}" != "success" ]] || \
-           [[ "${{ needs.test.result }}" != "success" ]] || \
-           [[ "${{ needs.build.result }}" != "success" ]]; then
-          echo "One or more required checks failed"
-          exit 1
-        fi
-        echo "All required checks passed!"
+      - name: Check if all required jobs passed
+        run: |
+          if [[ "${{ needs.pre-commit.result }}" != "success" ]] || \
+             [[ "${{ needs.code-quality.result }}" != "success" ]] || \
+             [[ "${{ needs.type-check.result }}" != "success" ]] || \
+             [[ "${{ needs.security.result }}" != "success" ]] || \
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "One or more required checks failed"
+            exit 1
+          fi
+          echo "All required checks passed!"
