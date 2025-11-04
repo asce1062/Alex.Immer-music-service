@@ -39,7 +39,7 @@
     "exactOptionalPropertyTypes": true,
 
     /* Completeness */
-    "skipLibCheck": true
+    "skipLibCheck": true,
   },
   "exclude": [
     "node_modules",
@@ -51,6 +51,6 @@
     "coverage",
     "scripts",
     "Music",
-    "__pycache__"
-  ]
+    "__pycache__",
+  ],
 }

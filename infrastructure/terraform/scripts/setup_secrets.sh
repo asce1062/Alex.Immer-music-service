@@ -125,9 +125,11 @@ if aws secretsmanager describe-secret --secret-id "$SECRET_NAME" &> /dev/null; t
         print_info "Aborted by user"
         exit 0
     fi
+    # shellcheck disable=SC2034
     UPDATE_MODE=true
 else
     print_info "Secret does not exist yet (will be created by Terraform)"
+    # shellcheck disable=SC2034
     UPDATE_MODE=false
 fi
 
@@ -142,7 +144,7 @@ print_info "Never commit these credentials to git or share them"
 echo ""
 
 # Prompt for Access Key ID
-read -p "Enter AWS_ACCESS_KEY_ID (starts with AKIA...): " ACCESS_KEY_ID
+read -r -p "Enter AWS_ACCESS_KEY_ID (starts with AKIA...): " ACCESS_KEY_ID
 
 if [[ ! $ACCESS_KEY_ID =~ ^AKIA[A-Z0-9]{16}$ ]]; then
     print_error "Invalid access key format! Should start with AKIA and be 20 characters"
@@ -150,7 +152,7 @@ if [[ ! $ACCESS_KEY_ID =~ ^AKIA[A-Z0-9]{16}$ ]]; then
 fi
 
 # Prompt for Secret Access Key (hidden input)
-read -s -p "Enter AWS_SECRET_ACCESS_KEY (will be hidden): " SECRET_ACCESS_KEY
+read -r -s -p "Enter AWS_SECRET_ACCESS_KEY (will be hidden): " SECRET_ACCESS_KEY
 echo ""
 
 if [ ${#SECRET_ACCESS_KEY} -lt 40 ]; then

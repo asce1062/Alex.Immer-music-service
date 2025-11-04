@@ -1,3 +1,4 @@
+---
 name: Monorepo CI/CD Pipeline
 
 on:
@@ -5,7 +6,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 env:
   PYTHON_VERSION: "3.11"
