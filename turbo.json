@@ -1,0 +1,47 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local", "tsconfig.json", ".prettierrc.json", ".eslintrc.json"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "build/**", ".output/**"],
+      "env": ["NODE_ENV", "AWS_REGION", "S3_BUCKET", "CDN_BASE"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tests/**/*", "**/*.test.ts"]
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "test:coverage": {
+      "dependsOn": ["build"],
+      "outputs": ["coverage/**"]
+    },
+    "lint": {
+      "outputs": [],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.astro"]
+    },
+    "type-check": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "format": {
+      "outputs": [],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.astro", "src/**/*.json"]
+    },
+    "clean": {
+      "cache": false
+    },
+    "security": {
+      "outputs": []
+    }
+  },
+  "globalEnv": ["NODE_ENV", "CI"]
+}

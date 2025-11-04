@@ -1,0 +1,35 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["eslint.config.mjs", "turbo.json"],
+      "project": ["**/*.{js,ts,tsx,jsx,mjs,cjs}"]
+    },
+    "api": {
+      "entry": ["src/index.ts", "src/**/*.ts", "tests/**/*.test.ts"],
+      "project": ["src/**/*.ts", "tests/**/*.ts"]
+    },
+    "web": {
+      "entry": ["src/pages/**/*.astro", "src/pages/**/*.ts", "astro.config.mjs"],
+      "project": ["src/**/*.{astro,ts,tsx}", "astro.config.mjs"]
+    }
+  },
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/.next/**",
+    "**/.turbo/**",
+    "**/.output/**",
+    "**/.astro/**",
+    "**/coverage/**",
+    "**/scripts/**",
+    "**/Music/**",
+    "**/__pycache__/**",
+    "*.config.{js,mjs,ts}",
+    "infrastructure/terraform/remote-state/02-infrastructure/cloudfront-function.js"
+  ],
+  "ignoreDependencies": ["@types/node", "typescript", "prettier", "eslint", "vitest", "turbo"],
+  "ignoreExportsUsedInFile": true,
+  "includeEntryExports": true
+}

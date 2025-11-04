@@ -1,0 +1,26 @@
+# ==============================================================================
+# Music Service - Runtime Dependencies
+# ==============================================================================
+# ⚠️  DEPRECATED: This file is maintained for backward compatibility only.
+#
+# 🎯 RECOMMENDED: Install using pyproject.toml instead:
+#     pip install -e .
+#
+# Source of truth: pyproject.toml [project.dependencies]
+# This file will be removed in a future version.
+# ==============================================================================
+
+# AWS SDK
+boto3>=1.40.0
+
+# Audio metadata extraction
+mutagen>=1.47.0
+
+# Image processing (album art)
+pillow>=12.0.0
+
+# CLI argument parsing (docopt-style)
+docopt>=0.6.2
+
+# Configuration files
+PyYAML>=6.0

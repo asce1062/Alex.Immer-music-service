@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+.output/
+.turbo/
+.astro/
+
+# Python
+scripts/**/*.py
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+.nyc_output
+
+# Misc
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# Music files
+Music/
+
+# Generated files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
