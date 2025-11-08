@@ -133,6 +133,7 @@ class Config:
             "MUSIC_S3_BUCKET": "s3_bucket",
             "MUSIC_S3_REGION": "s3_region",
             "MUSIC_CDN_BASE": "cdn_base",
+            "CLOUDFRONT_DISTRIBUTION_ID": "cloudfront_distribution_id",
         }
 
         for env_var, config_key in env_mapping.items():
@@ -226,6 +227,11 @@ class Config:
     def thumbnail_quality(self) -> int:
         """JPEG thumbnail quality (1-100)."""
         return int(str(self.config["thumbnail_quality"]))
+
+    @property
+    def cloudfront_distribution_id(self) -> str | None:
+        """CloudFront distribution ID for cache invalidation."""
+        return self.config.get("cloudfront_distribution_id")
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value by key."""

@@ -187,16 +187,10 @@ resource "aws_acm_certificate" "cert" {
 }
 
 # ============================================================================
-# CloudFront Function - Referer-based Access Control
+# CloudFront Function - REMOVED
 # ============================================================================
-resource "aws_cloudfront_function" "referer_filter" {
-  name    = "music-cdn-referer-filter"
-  runtime = "cloudfront-js-1.0"
-  comment = "Reject requests from unauthorized referers (hotlink protection)"
-  publish = true
-
-  code = file("${path.module}/cloudfront-function.js")
-}
+# Referer-based access control has been replaced with CloudFront signed cookies
+# for more secure authentication. See cloudfront-keys.tf for the new implementation.
 
 # ============================================================================
 # CloudFront Distribution
@@ -230,11 +224,10 @@ resource "aws_cloudfront_distribution" "cdn" {
     # Use AWS managed caching policy
     cache_policy_id = var.cache_policy_id
 
-    # Attach referer filter function
-    function_association {
-      event_type   = "viewer-request"
-      function_arn = aws_cloudfront_function.referer_filter.arn
-    }
+    # Require signed cookies for viewer authentication
+    # NOTE: This works with OAC because we removed origin_request_policy_id
+    # CloudFront validates cookies for viewers but doesn't forward them to S3
+    trusted_key_groups = [aws_cloudfront_key_group.music_service.id]
   }
 
   # Custom error responses

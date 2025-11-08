@@ -290,6 +290,15 @@ pre-commit-update: ## Update pre-commit hooks to latest versions
 	pre-commit autoupdate
 	@echo "$(GREEN)✓ Pre-commit hooks updated$(NC)"
 
+test-husky: ## Test Husky git hooks without committing
+	@echo "$(BLUE)Testing Husky pre-commit hook...$(NC)"
+	./.husky/pre-commit
+	@echo ""
+	@echo "$(BLUE)Testing commit message validation...$(NC)"
+	echo "feat: test commit message" | npx commitlint
+	@echo ""
+	@echo "$(GREEN)✅ Husky hooks working correctly!$(NC)"
+
 # ============================================================================
 # Combined Checks
 # ============================================================================
@@ -322,6 +331,18 @@ build-web: ## Build Web workspace
 	@echo "$(BLUE)Building Web...$(NC)"
 	npm run build:web
 	@echo "$(GREEN)✓ Web built$(NC)"
+
+build-lambda: ## Build Lambda function and package for deployment
+	@echo "$(BLUE)Building Lambda function...$(NC)"
+	cd api && npm install && npm run build
+	@echo "$(GREEN)✓ Lambda built: api/dist/auth-session.zip$(NC)"
+
+deploy-lambda: build-lambda ## Build and deploy Lambda function to AWS
+	@echo "$(BLUE)Deploying Lambda function...$(NC)"
+	mkdir -p infrastructure/terraform/remote-state/02-infrastructure/lambda
+	cp api/dist/auth-session.zip infrastructure/terraform/remote-state/02-infrastructure/lambda/
+	cd infrastructure/terraform/remote-state/02-infrastructure && terraform apply -target=aws_lambda_function.auth_session
+	@echo "$(GREEN)✓ Lambda deployed$(NC)"
 
 # ============================================================================
 # Development Workflow
@@ -361,6 +382,63 @@ sync: ## Run full music sync
 sync-validate: ## Validate music directory structure
 	@echo "$(BLUE)Validating music directory...$(NC)"
 	python scripts/music_sync.py validate
+
+sync-invalidate: ## Invalidate CloudFront cache (all music content)
+	@echo "$(BLUE)Invalidating CloudFront cache...$(NC)"
+	python -c "from scripts.utils.cloudfront_utils import invalidate_all_music_content; invalidate_all_music_content()"
+
+sync-invalidate-metadata: ## Invalidate CloudFront cache (metadata only)
+	@echo "$(BLUE)Invalidating CloudFront metadata cache...$(NC)"
+	python -c "from scripts.utils.cloudfront_utils import invalidate_metadata_only; invalidate_metadata_only()"
+
+# ============================================================================
+# CloudFront Signed Cookies Setup
+# ============================================================================
+cf-generate-keypair: ## Generate CloudFront RSA key pair for signed cookies
+	@echo "$(BLUE)Generating CloudFront key pair...$(NC)"
+	./infrastructure/terraform/scripts/generate_cloudfront_keypair.sh
+	@echo "$(GREEN)✓ Key pair generated in keys/$(NC)"
+	@echo "$(YELLOW)Next steps:$(NC)"
+	@echo "  1. Upload public key to CloudFront Console"
+	@echo "  2. Copy Key Pair ID"
+	@echo "  3. Run: make cf-upload-key KEY_PAIR_ID=K2JCJMDEHXQW5F"
+
+cf-upload-key: ## Upload CloudFront private key to Secrets Manager (requires KEY_PAIR_ID)
+	@if [ -z "$(KEY_PAIR_ID)" ]; then \
+		echo "$(RED)Error: KEY_PAIR_ID is required$(NC)"; \
+		echo "Usage: make cf-upload-key KEY_PAIR_ID=K2JCJMDEHXQW5F"; \
+		exit 1; \
+	fi
+	@echo "$(BLUE)Uploading CloudFront private key to Secrets Manager...$(NC)"
+	python scripts/utils/upload_cloudfront_key.py --key-pair-id $(KEY_PAIR_ID)
+	@echo "$(GREEN)✓ Private key uploaded$(NC)"
+
+cf-generate-secrets: ## Generate client secrets for music service API
+	@echo "$(BLUE)Generating client secrets...$(NC)"
+	python scripts/utils/generate_client_secrets.py
+	@echo "$(YELLOW)Copy and run the AWS CLI commands above to store secrets$(NC)"
+
+cf-setup: ## Complete CloudFront signed cookies setup (interactive)
+	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║  $(BLUE)CloudFront Signed Cookies Setup$(CYAN)                       ║$(NC)"
+	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(BLUE)Step 1: Generate CloudFront key pair$(NC)"
+	@$(MAKE) cf-generate-keypair
+	@echo ""
+	@echo "$(YELLOW)⏸  Paused: Please complete the following:$(NC)"
+	@echo "  1. Go to AWS Console → CloudFront → Public keys"
+	@echo "  2. Create public key with content from keys/cloudfront_public_key.pem"
+	@echo "  3. Copy the Key Pair ID (e.g., K2JCJMDEHXQW5F)"
+	@echo ""
+	@read -p "Enter Key Pair ID: " KEY_PAIR_ID; \
+		$(MAKE) cf-upload-key KEY_PAIR_ID=$$KEY_PAIR_ID
+	@echo ""
+	@echo "$(BLUE)Step 3: Generate client secrets$(NC)"
+	@$(MAKE) cf-generate-secrets
+	@echo ""
+	@echo "$(GREEN)✅ CloudFront setup complete!$(NC)"
+	@echo "$(YELLOW)Next: Copy public key to Terraform and run 'make tf-apply'$(NC)"
 
 # ============================================================================
 # Terraform Infrastructure
@@ -459,3 +537,87 @@ ci-fast: ## Run fast CI checks
 	@$(MAKE) quick-check
 	@$(MAKE) test-fast
 	@echo "$(GREEN)✅ Fast CI checks passed!$(NC)"
+
+# ============================================================================
+# End-to-End Deployment
+# ============================================================================
+deploy-full: ## Full deployment: infrastructure + Lambda + sync
+	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║  $(BLUE)Full Deployment Workflow$(CYAN)                              ║$(NC)"
+	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(BLUE)Step 1: Deploy infrastructure$(NC)"
+	@$(MAKE) tf-apply
+	@echo ""
+	@echo "$(BLUE)Step 2: Build and deploy Lambda$(NC)"
+	@$(MAKE) deploy-lambda
+	@echo ""
+	@echo "$(BLUE)Step 3: Sync music files$(NC)"
+	@$(MAKE) sync
+	@echo ""
+	@echo "$(GREEN)✅ Full deployment complete!$(NC)"
+
+test-auth: ## Test authentication API endpoint
+	@echo "$(BLUE)Testing authentication API...$(NC)"
+	@cd infrastructure/terraform/remote-state/02-infrastructure && \
+		API_ENDPOINT=$$(terraform output -raw api_gateway_endpoint 2>/dev/null || echo "NOT_DEPLOYED"); \
+		if [ "$$API_ENDPOINT" = "NOT_DEPLOYED" ]; then \
+			echo "$(RED)Error: API Gateway not deployed. Run 'make tf-apply' first$(NC)"; \
+			exit 1; \
+		fi; \
+		echo "API Endpoint: $$API_ENDPOINT"; \
+		echo "$(YELLOW)Fetching client secret...$(NC)"; \
+		CLIENT_SECRET=$$(aws secretsmanager get-secret-value \
+			--secret-id music-service/clients/alexmbugua-personal \
+			--query SecretString --output text 2>/dev/null | jq -r .client_secret 2>/dev/null || echo "NOT_FOUND"); \
+		if [ "$$CLIENT_SECRET" = "NOT_FOUND" ]; then \
+			echo "$(RED)Error: Client secret not found. Run 'make cf-generate-secrets' first$(NC)"; \
+			exit 1; \
+		fi; \
+		echo "$(BLUE)Testing POST /v1/session...$(NC)"; \
+		curl -X POST "$$API_ENDPOINT/v1/session" \
+			-H "x-client-id: alexmbugua-personal" \
+			-H "x-client-secret: $$CLIENT_SECRET" \
+			-H "Origin: https://alexmbugua.me" \
+			-v
+
+test-cdn: ## Test CDN access (requires valid cookies from test-auth)
+	@echo "$(BLUE)Testing CDN access...$(NC)"
+	@echo "$(YELLOW)This requires valid cookies from a recent authentication$(NC)"
+	@echo "$(YELLOW)Run 'make test-auth' first to get cookies$(NC)"
+	@echo ""
+	@echo "Test without cookies (should fail with 403):"
+	curl -I https://cdn.alexmbugua.me/metadata/manifest.json
+	@echo ""
+	@echo "$(YELLOW)To test with cookies, extract them from 'make test-auth' output$(NC)"
+
+# ============================================================================
+# Logs & Debugging
+# ============================================================================
+logs-lambda: ## Tail Lambda function logs (CloudWatch)
+	@echo "$(BLUE)Tailing Lambda logs...$(NC)"
+	aws logs tail /aws/lambda/music-service-auth-session-production --follow
+
+logs-api: ## Tail API Gateway logs (CloudWatch)
+	@echo "$(BLUE)Tailing API Gateway logs...$(NC)"
+	aws logs tail /aws/apigateway/music-service-production --follow
+
+show-outputs: ## Show Terraform outputs (API endpoint, ARNs, etc.)
+	@echo "$(BLUE)Terraform Outputs:$(NC)"
+	@cd infrastructure/terraform/remote-state/02-infrastructure && terraform output
+
+show-secrets: ## Show all secrets in Secrets Manager (names only)
+	@echo "$(BLUE)Secrets Manager Secrets:$(NC)"
+	@aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `music-service`)].Name' --output table
+
+show-dns-setup: ## Show DNS configuration for Netlify (api.alexmbugua.me)
+	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║  $(BLUE)Netlify DNS Setup Instructions$(CYAN)                        ║$(NC)"
+	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@cd infrastructure/terraform/remote-state/02-infrastructure && \
+		terraform output -json netlify_dns_setup_instructions | jq -r '. | "$(YELLOW)📋 DNS Record for API Gateway:$(NC)\n\nName:  \(.api_cname.name)\nType:  \(.api_cname.type)\nValue: \(.api_cname.value)\nTTL:   \(.api_cname.ttl) seconds\n\n$(YELLOW)📋 Certificate Validation Records:$(NC)\n(Check certificate validation output below)\n\n$(BLUE)Instructions:$(NC)\n\(.instructions)\n"' || echo "$(RED)Error: Run 'make tf-apply' first to create infrastructure$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Certificate Validation Records:$(NC)"
+	@cd infrastructure/terraform/remote-state/02-infrastructure && \
+		terraform output -json api_certificate_validation_records 2>/dev/null | jq -r '.[] | "Name:  \(.name)\nType:  \(.type)\nValue: \(.value)\n"' || echo "$(YELLOW)No validation records yet (certificate not created)$(NC)"

@@ -1,0 +1,45 @@
+# ============================================================================
+# Husky Pre-commit Hook
+# ============================================================================
+# This hook runs before every commit to ensure code quality
+#
+# What it does:
+# 1. Auto-formats all code (Python, TypeScript, Terraform)
+# 2. Auto-fixes linting issues where possible
+# 3. Runs pre-commit hooks (additional checks)
+#
+# If any checks fail, the commit will be aborted
+# ============================================================================
+
+echo "🔨 Running pre-commit checks..."
+echo ""
+
+# Step 1: Format all code (auto-fix)
+echo "📝 Formatting code..."
+make format || {
+  echo "❌ Formatting failed!"
+  exit 1
+}
+
+# Step 2: Fix linting issues (auto-fix)
+echo ""
+echo "🔧 Fixing linting issues..."
+make lint-fix || {
+  echo "❌ Lint fixes failed!"
+  exit 1
+}
+
+# Step 3: Run pre-commit hooks (final checks)
+echo ""
+echo "✅ Running pre-commit validation..."
+make pre-commit || {
+  echo "❌ Pre-commit hooks failed!"
+  echo ""
+  echo "💡 Tip: Some issues cannot be auto-fixed."
+  echo "   Review the errors above and fix manually."
+  exit 1
+}
+
+echo ""
+echo "✅ All pre-commit checks passed!"
+echo ""

@@ -83,14 +83,6 @@ output "iam_user_arn" {
 }
 
 # ============================================================================
-# CloudFront Function Outputs
-# ============================================================================
-output "cloudfront_function_arn" {
-  description = "ARN of the CloudFront Function"
-  value       = aws_cloudfront_function.referer_filter.arn
-}
-
-# ============================================================================
 # Netlify DNS Records
 # ============================================================================
 output "netlify_dns_records_acm" {

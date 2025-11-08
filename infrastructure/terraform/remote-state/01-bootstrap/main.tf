@@ -100,6 +100,21 @@ resource "aws_iam_user_policy_attachment" "secrets_manager_readwrite" {
   policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
 }
 
+resource "aws_iam_user_policy_attachment" "lambda_full_access" {
+  user       = aws_iam_user.deployer.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSLambda_FullAccess"
+}
+
+resource "aws_iam_user_policy_attachment" "apigateway_admin" {
+  user       = aws_iam_user.deployer.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator"
+}
+
+resource "aws_iam_user_policy_attachment" "cloudwatch_full_access" {
+  user       = aws_iam_user.deployer.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchFullAccess"
+}
+
 # ============================================================================
 # Custom Scoped IAM Policy (Sensitive IAM Operations Only)
 # ============================================================================
@@ -135,6 +150,57 @@ data "aws_iam_policy_document" "scoped_iam_policy" {
     resources = [
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:policy/music-service-*",
     ]
+  }
+
+  # IAM - Role management (music-service prefix only)
+  statement {
+    sid    = "IAMRoleManagement"
+    effect = "Allow"
+
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:UpdateRole",
+      "iam:ListRolePolicies",
+      "iam:ListAttachedRolePolicies",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:GetRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListRoleTags",
+      "iam:PassRole",
+    ]
+
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/music-service-*",
+    ]
+  }
+
+  # IAM - Service-linked role management (no tagging allowed)
+  statement {
+    sid    = "IAMServiceLinkedRoleManagement"
+    effect = "Allow"
+
+    actions = [
+      "iam:CreateServiceLinkedRole",
+      "iam:DeleteServiceLinkedRole",
+      "iam:GetServiceLinkedRoleDeletionStatus",
+      "iam:GetRole",
+    ]
+
+    resources = [
+      "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/*",
+    ]
+
+    condition {
+      test     = "StringEquals"
+      variable = "iam:AWSServiceName"
+      values   = ["ops.apigateway.amazonaws.com"]
+    }
   }
 
   # IAM - Attach policies to self only
