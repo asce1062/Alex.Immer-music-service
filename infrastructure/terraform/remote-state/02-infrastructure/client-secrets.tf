@@ -121,22 +121,10 @@ resource "aws_secretsmanager_secret_version" "client_music_app_mobile" {
 # ============================================================================
 # IAM Policy for Lambda to Access Client Secrets
 # ============================================================================
-# This policy will be attached to the Lambda execution role (see api-gateway.tf)
-data "aws_iam_policy_document" "lambda_client_secrets_access" {
-  statement {
-    sid    = "AllowReadClientSecrets"
-    effect = "Allow"
-    actions = [
-      "secretsmanager:GetSecretValue",
-      "secretsmanager:DescribeSecret"
-    ]
-    resources = [
-      aws_secretsmanager_secret.client_alexmbugua_personal.arn,
-      aws_secretsmanager_secret.client_music_app_web.arn,
-      aws_secretsmanager_secret.client_music_app_mobile.arn
-    ]
-  }
-}
+# The policy for Lambda to access client secrets is defined inline in
+# api-gateway.tf (resource "aws_iam_role_policy" "lambda_secrets_access")
+# This allows the Lambda function to read client credentials and the
+# CloudFront signing key from Secrets Manager.
 
 # ============================================================================
 # Outputs

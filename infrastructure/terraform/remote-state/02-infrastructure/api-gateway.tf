@@ -105,6 +105,7 @@ resource "aws_lambda_function" "auth_session" {
   role             = aws_iam_role.lambda_execution.arn
   handler          = "index.handler"
   runtime          = "nodejs20.x"
+  architectures    = ["arm64"] # Use Graviton for cost optimization (~20% savings)
   timeout          = 10
   memory_size      = 256
   source_code_hash = fileexists("${path.module}/lambda/auth-session.zip") ? filebase64sha256("${path.module}/lambda/auth-session.zip") : null
@@ -120,9 +121,8 @@ resource "aws_lambda_function" "auth_session" {
   }
 
   tags = {
-    Name        = "music-service-auth-session"
-    Environment = var.environment
-    Purpose     = "Client authentication and signed cookie generation"
+    Name    = "music-service-auth-session"
+    Purpose = "Client authentication and signed cookie generation"
   }
 }
 

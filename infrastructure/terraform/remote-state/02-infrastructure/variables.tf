@@ -68,12 +68,6 @@ variable "cache_policy_id" {
   default     = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingDisabled - AWS managed caching
 }
 
-variable "import_existing" {
-  description = "Flag to indicate importing existing resources (for documentation)"
-  type        = bool
-  default     = true
-}
-
 # ============================================================================
 # Referer Allowlist - REMOVED
 # ============================================================================

@@ -31,6 +31,21 @@ terraform {
 }
 
 # ============================================================================
+# Local Variables
+# ============================================================================
+locals {
+  # Map internal environment names to FinOps-compliant values
+  finops_environment = {
+    production = "Prod"
+    staging    = "Stage"
+    dev        = "Dev"
+  }[var.environment]
+
+  # Service name for FinOps tagging
+  service_name = "music-service"
+}
+
+# ============================================================================
 # Provider Configuration
 # ============================================================================
 provider "aws" {
@@ -39,8 +54,9 @@ provider "aws" {
   default_tags {
     tags = {
       Project     = "music-service"
+      Service     = local.service_name
       ManagedBy   = "terraform"
-      Environment = var.environment
+      Environment = local.finops_environment
     }
   }
 }
@@ -53,8 +69,9 @@ provider "aws" {
   default_tags {
     tags = {
       Project     = "music-service"
+      Service     = local.service_name
       ManagedBy   = "terraform"
-      Environment = var.environment
+      Environment = local.finops_environment
     }
   }
 }
