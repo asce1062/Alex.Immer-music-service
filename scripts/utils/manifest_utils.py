@@ -1,13 +1,61 @@
-"""Manifest generation utilities.
+"""Manifest generation utilities for v3 metadata schema.
 
-Builds JSON metadata files for albums, tracks, trackers, and unreleased content.
+Builds JSON metadata files for albums, tracks, trackers, and unreleased content
+with comprehensive v3 schema enhancements.
+
+v3 Schema Structure:
+manifest.json:
+  - schema_version: "3.0.0"
+  - content_type: "metadata" (distinguish from media)
+  - cache_info: Strategy, TTL, local/remote paths
+  - catalog: Totals with normalized numerics (total_size_bytes, total_duration_seconds)
+  - integrity: SHA256 checksums for all JSON files
+
+albums.json (per album):
+  - album_id, title, artist, release_date
+  - duration_seconds, duration_human (normalized)
+  - file_size_bytes, file_size (normalized)
+  - bpm_range: {min, max, avg} (restructured from single value)
+  - checksum: Album-level SHA256 from track checksums
+  - tracks: Array of track metadata with v3 fields
+  - cover_art: URLs for covers and thumbnails
+
+tracks.json (per track):
+  - track_id, title, artist, album
+  - duration_seconds, bit_rate_kbps, file_size_bytes (normalized numerics)
+  - checksum: {algorithm, value, verified_at}
+  - content_length, last_modified, accept_ranges, etag (HTTP range support)
+  - explicit: Content rating boolean
+  - cdn_url, s3_url: Playback URLs
+
+tracker.json (per tracker file):
+  - tracker_id, title, file_name, format
+  - source_format_version, tracker_tools (from binary parsing)
+  - channels, patterns, instruments, samples
+  - checksum, content_length, last_modified, accept_ranges, etag
+  - linked: Boolean indicating MP3 master exists
+  - linked_master: Reference to MP3 track if available
+
+unreleased.json:
+  - Tracker files without released MP3 masters
+  - Same v3 fields as tracker.json entries
+
+Functions:
+- build_albums_manifest(): Generate albums.json with v3 schema
+- build_tracks_manifest(): Generate tracks.json with v3 schema
+- build_tracker_manifest(): Generate tracker.json with v3 schema and linkage
+- build_unreleased_manifest(): Generate unreleased.json for unlinked trackers
+- build_master_manifest(): Generate manifest.json with integrity checksums
 """
 
+import hashlib
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from .cache_utils import get_manifest_cache_info
 from .config import Config
 from .file_utils import get_file_list, normalize_stem, url_safe_name
 from .id_utils import (
@@ -25,37 +73,14 @@ def build_albums_manifest(
     albums_data: list[dict[str, Any]],
     config: Config,
 ) -> list[dict[str, Any]]:
-    """Build albums.json manifest with v2 enhancements.
-
-    V2 Format:
-    [
-        {
-            "album_id": "8bit-seduction",
-            "album": "8Bit Seduction",
-            "artist": "Alex.Immer",
-            "year": "2024",
-            "genre": "Chip Tunes",
-            "description": "Album description...",
-            "tags": ["retro", "chiptune"],
-            "cdn_cover_url": "https://cdn.../covers/8Bit-Seduction/cover.png",
-            "s3_cover_url": "https://s3.../covers/8Bit-Seduction/cover.png",
-            "cdn_thumbnail_url": "https://cdn.../covers/thumbs/8bit-seduction.png",
-            "s3_thumbnail_url": "https://s3.../covers/thumbs/8bit-seduction.png",
-            "total_tracks": 10,
-            "duration": "28m 45s",
-            "bpm_range": [95.0, 140.0],
-            "released": true,
-            "tracks": ["url1", "url2", ...] // Legacy field
-        },
-        ...
-    ]
+    """Build albums.json manifest.
 
     Args:
         albums_data: List of album dictionaries with tracks and cover info
         config: Configuration instance
 
     Returns:
-        List of album manifest entries with v2 fields
+        List of album manifest entries
     """
     manifest: list[dict[str, Any]] = []
 
@@ -63,7 +88,7 @@ def build_albums_manifest(
     album_metadata_overrides = config.load_album_metadata()
 
     for album in albums_data:
-        album_name = album["name"]
+        album_name = album["name"]  # This is the directory name (URL-safe)
         album_id = generate_album_id(album_name)
 
         # Get override data if available
@@ -72,9 +97,14 @@ def build_albums_manifest(
         # Extract track metadata for calculations
         track_list = album.get("track_metadata", [])
 
+        # Get the real album name from the first track's ID3 TALB tag
+        real_album_name = album_name  # Default to directory name
+        if track_list and "album" in track_list[0]:
+            real_album_name = track_list[0]["album"]
+
         entry: dict[str, Any] = {
             "album_id": album_id,
-            "album": album_name,
+            "album": real_album_name,  # Use real name from ID3 tags
             "artist": config.default_artist,
             "total_tracks": len(track_list),
             "released": album_name.lower() != "unreleased",
@@ -83,12 +113,49 @@ def build_albums_manifest(
         # Calculate aggregate fields from tracks
         if track_list:
             # Total duration
-            entry["duration"] = calculate_total_duration(track_list)
+            duration_human = calculate_total_duration(track_list)
+            entry["duration"] = duration_human  # Legacy field
 
-            # BPM range
-            bpm_range = calculate_bpm_range(track_list)
-            if bpm_range:
-                entry["bpm_range"] = bpm_range
+            # Calculate duration_seconds from tracks
+            total_seconds = sum(track.get("duration_seconds", 0) for track in track_list)
+            if total_seconds > 0:
+                entry["duration_seconds"] = total_seconds
+
+            # File size: sum of all track file sizes
+            total_bytes = sum(track.get("file_size_bytes", 0) for track in track_list)
+            if total_bytes > 0:
+                entry["file_size_bytes"] = total_bytes
+                entry["file_size_human"] = f"{total_bytes / (1024 * 1024):.2f} MiB"
+
+            # BPM range: restructured with min/max/avg
+            bpm_values = [
+                track.get("bpm_numeric", track.get("bpm"))
+                for track in track_list
+                if track.get("bpm_numeric") or track.get("bpm")
+            ]
+            # Filter to numeric values only
+            bpm_numeric_values = []
+            for bpm in bpm_values:
+                if isinstance(bpm, (int, float)):
+                    bpm_numeric_values.append(float(bpm))
+                elif isinstance(bpm, str):
+                    # Try to convert string BPM to float
+                    try:
+                        bpm_numeric_values.append(float(bpm))
+                    except (ValueError, TypeError):
+                        continue  # Skip invalid BPM values
+
+            if bpm_numeric_values:
+                entry["bpm_range"] = {
+                    "min": round(min(bpm_numeric_values), 1),
+                    "max": round(max(bpm_numeric_values), 1),
+                    "avg": round(sum(bpm_numeric_values) / len(bpm_numeric_values), 1),
+                }
+            else:
+                # Legacy format if no numeric BPM values
+                bpm_range = calculate_bpm_range(track_list)
+                if bpm_range:
+                    entry["bpm_range"] = bpm_range
 
             # Extract year from first track's recorded_date if available
             first_track = track_list[0]
@@ -106,12 +173,12 @@ def build_albums_manifest(
         if "tags" in overrides:
             entry["tags"] = overrides["tags"]
 
-        # Cover URLs (v2) - covers are directly in covers/ directory
+        # Cover URLs - covers are directly in covers/ directory
         safe_album_name = url_safe_name(album_name)
         entry["cdn_cover_url"] = f"{config.cdn_base_url}/covers/{quote(safe_album_name)}.png"
         entry["s3_cover_url"] = f"{config.s3_base_url}/covers/{quote(safe_album_name)}.png"
 
-        # Thumbnail URLs (v2)
+        # Thumbnail URLs
         thumb_name = f"{album_id}.{config.thumbnail_format}"
         entry["cdn_thumbnail_url"] = (
             f"{config.cdn_base_url}/covers/{config.DIR_STRUCTURE['thumbs']}/{quote(thumb_name)}"
@@ -119,6 +186,38 @@ def build_albums_manifest(
         entry["s3_thumbnail_url"] = (
             f"{config.s3_base_url}/covers/{config.DIR_STRUCTURE['thumbs']}/{quote(thumb_name)}"
         )
+
+        # Explicit content rating - check if any track is explicit
+        if track_list:
+            entry["explicit"] = any(track.get("explicit", False) for track in track_list)
+        else:
+            entry["explicit"] = False
+
+        # Album-level checksum (hash of all track files concatenated)
+        # This allows detecting changes to any track in the album
+        if track_list:
+            checksums = [
+                track.get("checksum", {}).get("value", "")
+                for track in track_list
+                if track.get("checksum")
+            ]
+            if checksums:
+                # Concatenate all track checksums and hash them
+                combined = "".join(sorted(checksums))
+                album_checksum = hashlib.sha256(combined.encode()).hexdigest()
+                entry["checksum"] = {
+                    "algorithm": "sha256",
+                    "value": album_checksum,
+                    "covers": [f"{safe_album_name}.png"],  # Files included
+                }
+
+        # HTTP Range Support - album last modified = newest track
+        if track_list:
+            last_modified_values = [
+                track.get("last_modified", "") for track in track_list if track.get("last_modified")
+            ]
+            if last_modified_values:
+                entry["last_modified"] = max(last_modified_values)
 
         # Legacy fields for backwards compatibility
         entry["tracks"] = album.get("tracks", [])
@@ -182,79 +281,30 @@ def build_tracks_manifest(
 def build_tracker_manifest(
     tracker_data: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Build tracker.json manifest with v2 enhancements.
-
-    V2 Format:
-    [
-        {
-            "tracker_id": "8bit-seduction-01-the-day-they-landed",
-            "title": "The Day They Landed",
-            "file_name": "01.The-Day-They-Landed.xm",
-            "format": "xm",
-            "file_size": "0.15 MiB",
-            "created": "2025-03-14T00:00:00Z",
-            "composer": "Alex.Immer",
-            "albums_cdn_url": "https://cdn.../albums/Album/tracker/file.xm",
-            "albums_s3_url": "https://s3.../albums/Album/tracker/file.xm",
-            "tracker_cdn_url": "https://cdn.../tracker/albums/Album/file.xm",
-            "tracker_s3_url": "https://s3.../tracker/albums/Album/file.xm",
-            "linked_master": {
-                "track_id": "8bit-seduction-01-the-day-they-landed",
-                "track_name": "The Day They Landed"
-            },
-            // Legacy fields for backwards compatibility
-            "album": "8Bit-Seduction",
-            "complete_name": "url",
-            "linked": true,
-            "format_long": "Extended Module"
-        },
-        ...
-    ]
+    """Build tracker.json manifest
 
     Args:
         tracker_data: List of tracker metadata dictionaries
 
     Returns:
-        List of tracker manifest entries with all v2 fields
+        List of tracker manifest entries
     """
-    # Pass through all metadata fields (v2 fields are already in tracker_data)
+    # Pass through all metadata fields (fields are already in tracker_data)
     return tracker_data
 
 
 def build_unreleased_manifest(
     unreleased_data: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Build unreleased.json manifest (only unlinked tracker files) with v2 enhancements.
-
-    V2 Format - same as tracker.json but filtered to only show tracker-only prototypes
-    (no mastered MP3 exists):
-    [
-        {
-            "tracker_id": "dreamscape-prototype",
-            "title": "Dreamscape Prototype",
-            "file_name": "Dreamscape-Prototype.mod",
-            "format": "mod",
-            "file_size": "0.15 MiB",
-            "created": "2025-03-14T00:00:00Z",
-            "composer": "Alex.Immer",
-            "tracker_cdn_url": "https://cdn.../tracker/unreleased/file.mod",
-            "tracker_s3_url": "https://s3.../tracker/unreleased/file.mod",
-            // Legacy fields
-            "album": "unreleased",
-            "complete_name": "url",
-            "linked": false,
-            "format_long": "ProTracker Module"
-        },
-        ...
-    ]
+    """Build unreleased.json manifest (only unlinked tracker files)
 
     Args:
         unreleased_data: List of unreleased tracker metadata dictionaries
 
     Returns:
-        List of unreleased manifest entries with v2 fields
+        List of unreleased manifest entries
     """
-    # Filter only unlinked trackers (pass through all v2 fields)
+    # Filter only unlinked trackers (pass through all fields)
     manifest = [tracker for tracker in unreleased_data if not tracker.get("linked", False)]
 
     return manifest
@@ -299,8 +349,6 @@ def build_master_manifest(
     Returns:
         Master manifest dictionary in production format
     """
-    from datetime import datetime
-
     # Get config values or use defaults
     cdn_base = config.cdn_base_url if config else "https://cdn.aleximmer.me"
     default_artist = config.default_artist if config else "Alex.Immer"
@@ -316,9 +364,22 @@ def build_master_manifest(
     # Calculate unlinked tracker files (total trackers - tracks with trackers)
     total_unlinked = max(0, tracker_count - tracks_count)
 
+    # Calculate catalog totals from albums_list if provided
+    total_size_bytes = 0
+    total_duration_seconds = 0
+    if albums_list:
+        for album in albums_list:
+            album_metadata = album.get("track_metadata", [])
+            total_size_bytes += sum(track.get("file_size_bytes", 0) for track in album_metadata)
+            total_duration_seconds += sum(
+                track.get("duration_seconds", 0) for track in album_metadata
+            )
+
     manifest: dict[str, Any] = {
-        "schema_version": "1.0.0",
-        "generated_at": datetime.now().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "schema_version": "3.0.0",
+        "content_type": "metadata",  # distinguish from media content
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "cache_info": get_manifest_cache_info(),  # cache strategy
         "artist": {
             "name": default_artist,
             "url": "https://alexmbugua.me",
@@ -335,6 +396,8 @@ def build_master_manifest(
             "total_tracks": tracks_count,
             "total_tracker_sources": tracker_count,
             "total_unlinked_tracker_files": total_unlinked,
+            "total_size_bytes": total_size_bytes,  # total catalog size
+            "total_duration_seconds": total_duration_seconds,  # total duration
         },
         "resources": {
             "albums_index": f"{cdn_base}/metadata/albums.json",
@@ -367,8 +430,8 @@ def build_master_manifest(
             ],
         },
         "api": {
-            "rest_entrypoint": "https://api.aleximmer.me/v1/music/",
-            "graphql_entrypoint": "https://api.aleximmer.me/graphql",
+            "rest_entrypoint": "https://music-api.aleximmer.me/v1/music/",
+            "graphql_entrypoint": "https://music-api.aleximmer.me/graphql",
             "examples": {
                 "album_query": (
                     '{ album(id: "8bit-seduction") { title year tracks { title duration } } }'
@@ -389,9 +452,16 @@ def build_master_manifest(
 
         enhanced_albums = []
         for album in albums_list:
-            album_name = str(album.get("name", "Unknown"))
+            album_name = str(album.get("name", "Unknown"))  # Directory name (URL-safe)
             album_id = sanitize_id(album_name)
             is_unreleased = album_name.lower() == "unreleased"
+
+            # Get the real album name from the first track's ID3 TALB tag
+            # (preserves original formatting: "Chi Mai" not "Chi-Mai")
+            real_album_name = album_name  # Default to directory name
+            track_metadata = album.get("track_metadata", [])
+            if track_metadata and "album" in track_metadata[0]:
+                real_album_name = track_metadata[0]["album"]
 
             # Try to get year from overrides, then from track metadata, fallback to current year
             year = 2024
@@ -400,7 +470,6 @@ def build_master_manifest(
                 year = overrides["year"]
             else:
                 # Try to extract from first track's recorded_date
-                track_metadata = album.get("track_metadata", [])
                 if track_metadata and "recorded_date" in track_metadata[0]:
                     year = int(str(track_metadata[0]["recorded_date"])[:4])
 
@@ -408,7 +477,7 @@ def build_master_manifest(
             default_cover = f"{cdn_base}/covers/default-cover.png"
             album_entry = {
                 "id": album_id,
-                "title": album_name,
+                "title": real_album_name,  # Use real name from ID3 tags
                 "released": not is_unreleased,
                 "year": year,
                 "cover": album.get("cover") or default_cover,
@@ -435,18 +504,21 @@ def build_master_manifest(
     return manifest
 
 
-def compute_file_checksums(metadata_dir: Path) -> dict[str, str]:
-    """Compute SHA256 checksums for metadata files.
+def compute_file_checksums(metadata_dir: Path) -> dict[str, dict[str, Any]]:
+    """Compute SHA256 checksums and metadata for metadata files (enhanced).
 
     Args:
         metadata_dir: Path to metadata directory
 
     Returns:
-        Dict mapping filename to SHA256 hex digest
+        Dict mapping filename to metadata dict with:
+        - value: SHA256 hex digest
+        - size_bytes: File size in bytes
+        - last_modified: ISO 8601 timestamp
     """
-    import hashlib
+    from .metadata_utils import get_file_last_modified_iso8601
 
-    checksums = {}
+    checksums: dict[str, dict[str, Any]] = {}
     for filename in ["albums.json", "tracks.json", "tracker.json", "unreleased.json"]:
         filepath = metadata_dir / filename
         if filepath.exists():
@@ -455,7 +527,13 @@ def compute_file_checksums(metadata_dir: Path) -> dict[str, str]:
                 # Read in chunks to handle large files
                 for chunk in iter(lambda: f.read(8192), b""):
                     sha256.update(chunk)
-            checksums[filename] = sha256.hexdigest()
+
+            # Enhanced checksum metadata
+            checksums[filename] = {
+                "value": sha256.hexdigest(),
+                "size_bytes": filepath.stat().st_size,
+                "last_modified": get_file_last_modified_iso8601(filepath),
+            }
 
     return checksums
 
@@ -553,18 +631,29 @@ def scan_and_build_manifests(
     if config.albums_dir.exists():
         all_mp3_files = get_file_list(config.albums_dir, extensions={".mp3"}, recursive=True)
 
-    # Collect tracker files from albums/{album}/tracker/ (primary location)
+    # Collect tracker files from primary locations
+    # albums/{album}/tracker/ and albums/{album}/Extras/tracker/
     # Note: tracker/albums/{album}/ contains symlinks/copies to these same files
     # We only scan the primary location to avoid duplicates in the linkage
     for album_dir in config.albums_dir.iterdir() if config.albums_dir.exists() else []:
         if not album_dir.is_dir():
             continue
+
+        # Collect from main tracker directory
         tracker_subdir = album_dir / "tracker"
         if tracker_subdir.exists():
             trackers_in_album = get_file_list(
                 tracker_subdir, extensions=config.TRACKER_EXTS, recursive=True
             )
             all_tracker_files.extend(trackers_in_album)
+
+        # Also collect from Extras/tracker directory
+        extras_tracker_subdir = album_dir / "Extras" / "tracker"
+        if extras_tracker_subdir.exists():
+            extras_trackers = get_file_list(
+                extras_tracker_subdir, extensions=config.TRACKER_EXTS, recursive=True
+            )
+            all_tracker_files.extend(extras_trackers)
 
     # Build tracker linkage mapping
     if verbose:
@@ -668,7 +757,7 @@ def scan_and_build_manifests(
                         "s3_url": metadata.get("s3_url", ""),
                     }
 
-            # Store track metadata for album manifest v2 calculations
+            # Store track metadata for album manifest calculations
             album_entry["track_metadata"] = track_metadata_list
 
             albums_list.append(album_entry)
@@ -849,7 +938,6 @@ def backup_existing_manifests(
         True if backup successful
     """
     import zipfile
-    from datetime import datetime
 
     if not existing_files:
         return True
