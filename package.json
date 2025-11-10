@@ -73,33 +73,35 @@
     "=========== CI/CD ===========": "",
     "ci": "npm run check:all",
     "ci:fast": "npm run check",
-    "prepare": "husky install || true"
+    "prepare": "husky"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0",
-    "eslint": "^9.0.0",
-    "eslint-config-prettier": "^10.0.0",
-    "eslint-plugin-import": "^2.30.0",
+    "@commitlint/cli": "^20.1.0",
+    "@commitlint/config-conventional": "^20.0.0",
+    "@types/node": "^24.10.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.2",
+    "@typescript-eslint/parser": "^8.46.2",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-node": "^11.1.0",
     "husky": "^9.1.7",
-    "knip": "^5.66.2",
+    "knip": "^5.68.0",
     "lint-staged": "^16.2.6",
     "prettier": "^3.6.2",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-toml": "^2.0.6",
-    "turbo": "^2.0.0",
-    "typescript": "^5.6.0",
+    "turbo": "^2.6.0",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.8"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0",
     "python": ">=3.11.0"
   },
-  "packageManager": "npm@10.9.2",
+  "packageManager": "npm@11.6.2",
   "keywords": [
     "music",
     "metadata",

@@ -73,22 +73,22 @@ resource "aws_secretsmanager_secret_version" "music_service_credentials" {
 # }
 
 # ============================================================================
-# Secret for CloudFront Signed URL Private Key (Future Use)
+# Secret for CloudFront Signed Cookie Private Key
 # ============================================================================
-resource "aws_secretsmanager_secret" "cloudfront_private_key" {
-  name        = "music-service/cloudfront-private-key"
-  description = "CloudFront private key for generating signed URLs (API Gateway)"
+resource "aws_secretsmanager_secret" "cloudfront_signing_key" {
+  name        = "music-service/cloudfront-signing-key"
+  description = "CloudFront private key for generating signed cookies"
 
   tags = {
-    Name        = "cloudfront-private-key"
+    Name        = "cloudfront-signing-key"
     Environment = var.environment
-    Purpose     = "CloudFront signed URL generation"
+    Purpose     = "CloudFront signed cookie generation"
   }
 }
 
-# Placeholder - actual key added manually or via automation
-resource "aws_secretsmanager_secret_version" "cloudfront_private_key" {
-  secret_id = aws_secretsmanager_secret.cloudfront_private_key.id
+# Placeholder - actual key added manually after CloudFront key pair creation
+resource "aws_secretsmanager_secret_version" "cloudfront_signing_key" {
+  secret_id = aws_secretsmanager_secret.cloudfront_signing_key.id
 
   secret_string = jsonencode({
     private_key = "PLACEHOLDER-REPLACE-WITH-ACTUAL-KEY"
@@ -133,12 +133,12 @@ output "secrets_manager_secret_name" {
   value       = aws_secretsmanager_secret.music_service_credentials.name
 }
 
-output "cloudfront_private_key_secret_arn" {
-  description = "ARN of the CloudFront private key secret"
-  value       = aws_secretsmanager_secret.cloudfront_private_key.arn
+output "cloudfront_signing_key_secret_arn" {
+  description = "ARN of the CloudFront signing key secret"
+  value       = aws_secretsmanager_secret.cloudfront_signing_key.arn
 }
 
-output "cloudfront_private_key_secret_name" {
-  description = "Name of the CloudFront private key secret"
-  value       = aws_secretsmanager_secret.cloudfront_private_key.name
+output "cloudfront_signing_key_secret_name" {
+  description = "Name of the CloudFront signing key secret"
+  value       = aws_secretsmanager_secret.cloudfront_signing_key.name
 }

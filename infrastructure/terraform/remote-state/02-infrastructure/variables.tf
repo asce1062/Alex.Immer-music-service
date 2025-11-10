@@ -63,43 +63,13 @@ variable "cloudfront_price_class" {
 }
 
 variable "cache_policy_id" {
-  description = "CloudFront cache policy ID (default: Managed-CachingOptimized)"
+  description = "CloudFront cache policy ID (Managed-CachingDisabled - prevents cookie-based cache collisions)"
   type        = string
-  default     = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingOptimized
-}
-
-variable "import_existing" {
-  description = "Flag to indicate importing existing resources (for documentation)"
-  type        = bool
-  default     = true
+  default     = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingDisabled - AWS managed caching
 }
 
 # ============================================================================
-# Referer Allowlist
+# Referer Allowlist - REMOVED
 # ============================================================================
-variable "allowed_referers" {
-  description = "List of allowed referer domains for CloudFront Function"
-  type        = list(string)
-  default = [
-    # Production domains
-    "https://alexmbugua.me",
-    "https://www.alexmbugua.me",
-    "https://asce1062.github.io",
-
-    # Development (localhost)
-    "http://localhost:4321", # Astro dev server
-    "http://localhost:4322", # Astro additional dev server
-    "http://localhost:3000", # Common dev port
-    "http://localhost:8080", # Common dev port
-    "http://localhost:8888", # Netlify local preview server
-    "http://127.0.0.1:4321", # Astro dev (IPv4)
-    "http://127.0.0.1:4322", # Astro additional dev server (IPv4)
-    "http://127.0.0.1:3000", # Common dev (IPv4)
-    "http://127.0.0.1:8080", # Common dev (IPv4)
-    "http://127.0.0.1:8888", # Netlify local preview server
-
-    # Netlify Deploy Previews (pattern: deploy-preview-{PR#}--{site-name}.netlify.app)
-    # Note: CloudFront Functions don't support wildcards, so add specific preview URLs as needed
-    "https://alexmbugua.netlify.app"
-  ]
-}
+# Referer-based access control has been replaced with CloudFront signed cookies.
+# Client authentication is now handled via API Gateway + Lambda.

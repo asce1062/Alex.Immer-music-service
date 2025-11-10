@@ -10,12 +10,28 @@ export default tseslint.config(
   ...tseslint.configs.stylisticTypeChecked,
   prettier,
 
-  // Global settings
+  // Global settings for non-API workspaces
   {
+    files: ['**/*.ts', '**/*.tsx'],
+    ignores: ['api/**'],
     languageOptions: {
       parserOptions: {
-        project: true,
+        projectService: {
+          allowDefaultProject: ['*.js', '*.mjs'],
+        },
         tsconfigRootDir: import.meta.dirname,
+      },
+    },
+  },
+
+  // API workspace - use eslint-specific tsconfig
+  {
+    files: ['api/**/*.ts', 'api/**/*.tsx'],
+    languageOptions: {
+      parserOptions: {
+        project: './api/tsconfig.eslint.json',
+        tsconfigRootDir: import.meta.dirname,
+        projectService: false,
       },
     },
   },
@@ -37,7 +53,9 @@ export default tseslint.config(
       '**/__pycache__/**',
       '*.config.js',
       '*.config.mjs',
-      '*.config.ts',
+      '**/*.d.ts', // TypeScript declaration files
+      '**/*.d.ts.map',
+      '**/*.js.map',
     ],
   },
 

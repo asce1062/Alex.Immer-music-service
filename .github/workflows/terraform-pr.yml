@@ -105,7 +105,27 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+            let planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+
+            // Sanitize sensitive information for public repository
+            planOutput = planOutput
+              // Redact AWS Account IDs (12-digit numbers in ARNs and resource IDs)
+              .replace(/\d{12}/g, 'XXXXXXXXXXXX')
+              // Redact CloudFront Distribution IDs (pattern: E followed by alphanumeric)
+              .replace(/E[A-Z0-9]{10,}/g, 'EXXXXXXXXXX')
+              // Redact API Gateway IDs (pattern: lowercase alphanumeric, ~10 chars)
+              .replace(/id=([a-z0-9]{7,15})\]/g, 'id=XXXXXXXXXX]')
+              .replace(/vwejavm7x9|ojlx4q7|jkul9wa|6daico/gi, 'XXXXXXXXXX')
+              // Redact CloudFront Key Pair IDs (pattern: K followed by alphanumeric)
+              .replace(/K[A-Z0-9]{10,}/g, 'KXXXXXXXXXX')
+              // Redact secret ARN suffixes (random 6-char suffix after secret name)
+              .replace(/(secret:[^-]+-[^-]+-[A-Za-z0-9]{6})/g, 'secret:REDACTED')
+              // Redact certificate ARNs
+              .replace(/(certificate\/)[a-f0-9-]{36}/g, '$1REDACTED')
+              // Redact specific resource identifiers
+              .replace(/E2NNAMGFKY5A2E/g, 'EXXXXXXXXXX') // OAC ID
+              .replace(/KTMWJPY573MB/g, 'KXXXXXXXXXX')   // Public Key ID
+              .replace(/b70fce4f-1248-4b3e-8e43-43b36647376f/g, 'REDACTED-UUID');
 
             const output = `#### Terraform Plan: \`${{ matrix.directory }}\` ✅
 
@@ -116,6 +136,8 @@ jobs:
             \`\`\`
 
             </details>
+
+            **Note**: Sensitive information (Account IDs, Resource IDs, ARNs) has been redacted for security.
 
             *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
 
@@ -136,6 +158,26 @@ jobs:
             let planOutput = '';
             try {
               planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+
+              // Sanitize sensitive information for public repository
+              planOutput = planOutput
+                // Redact AWS Account IDs (12-digit numbers in ARNs and resource IDs)
+                .replace(/\d{12}/g, 'XXXXXXXXXXXX')
+                // Redact CloudFront Distribution IDs (pattern: E followed by alphanumeric)
+                .replace(/E[A-Z0-9]{10,}/g, 'EXXXXXXXXXX')
+                // Redact API Gateway IDs (pattern: lowercase alphanumeric, ~10 chars)
+                .replace(/id=([a-z0-9]{7,15})\]/g, 'id=XXXXXXXXXX]')
+                .replace(/vwejavm7x9|ojlx4q7|jkul9wa|6daico/gi, 'XXXXXXXXXX')
+                // Redact CloudFront Key Pair IDs (pattern: K followed by alphanumeric)
+                .replace(/K[A-Z0-9]{10,}/g, 'KXXXXXXXXXX')
+                // Redact secret ARN suffixes (random 6-char suffix after secret name)
+                .replace(/(secret:[^-]+-[^-]+-[A-Za-z0-9]{6})/g, 'secret:REDACTED')
+                // Redact certificate ARNs
+                .replace(/(certificate\/)[a-f0-9-]{36}/g, '$1REDACTED')
+                // Redact specific resource identifiers
+                .replace(/E2NNAMGFKY5A2E/g, 'EXXXXXXXXXX') // OAC ID
+                .replace(/KTMWJPY573MB/g, 'KXXXXXXXXXX')   // Public Key ID
+                .replace(/b70fce4f-1248-4b3e-8e43-43b36647376f/g, 'REDACTED-UUID');
             } catch (e) {
               planOutput = 'Could not read plan output';
             }
@@ -151,6 +193,8 @@ jobs:
             </details>
 
             **Action Required**: Fix the errors above before merging.
+
+            **Note**: Sensitive information (Account IDs, Resource IDs, ARNs) has been redacted for security.
 
             *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Workflow: \`${{ github.workflow }}\`*`;
 
@@ -281,23 +325,58 @@ jobs:
         with:
           api-key: ${{ secrets.INFRACOST_API_KEY }}
 
-      - name: Generate Infracost Estimate
+      - name: Generate Infracost Estimates
         id: infracost
         run: |
-          cd infrastructure/terraform/remote-state
+          cd infrastructure/terraform/remote-state/02-infrastructure
 
-          # Initialize and generate plan for main infrastructure
-          cd 02-infrastructure
+          # Initialize Terraform
           terraform init -input=false
           terraform plan -out=tfplan.binary
           terraform show -json tfplan.binary > plan.json
 
-          # Run Infracost
-          infracost breakdown --path plan.json \
-            --format json \
-            --out-file /tmp/infracost.json || echo "Infracost failed"
+          # Generate cost estimates for different usage scenarios
+          echo "## Music Service Infrastructure - Cost Estimates" > /tmp/infracost-output.txt
+          echo "" >> /tmp/infracost-output.txt
 
-          cd ../../..
+          # Medium usage (default/expected)
+          echo "### 📊 Medium Usage (Expected - Default Scenario)" >> /tmp/infracost-output.txt
+          echo "~10,000 streams/month, regular uploads, growing user base" >> /tmp/infracost-output.txt
+          echo "" >> /tmp/infracost-output.txt
+          infracost breakdown --path plan.json \
+            --usage-file ../../.infracost/usage.yml \
+            --format table \
+            --show-skipped >> /tmp/infracost-output.txt 2>&1 || echo "Failed to generate medium estimate"
+          echo "" >> /tmp/infracost-output.txt
+
+          # Low usage
+          echo "### 📉 Low Usage (Minimal Traffic)" >> /tmp/infracost-output.txt
+          echo "~100 streams/month, personal use" >> /tmp/infracost-output.txt
+          echo "" >> /tmp/infracost-output.txt
+          cat ../../.infracost/usage.yml | sed 's/default_usage: medium/default_usage: low/' > /tmp/usage-low.yml
+          infracost breakdown --path plan.json \
+            --usage-file /tmp/usage-low.yml \
+            --format table \
+            --show-skipped >> /tmp/infracost-output.txt 2>&1 || echo "Failed to generate low estimate"
+          echo "" >> /tmp/infracost-output.txt
+
+          # High usage
+          echo "### 📈 High Usage (Popular Content)" >> /tmp/infracost-output.txt
+          echo "~100,000 streams/month, frequent uploads, large user base" >> /tmp/infracost-output.txt
+          echo "" >> /tmp/infracost-output.txt
+          cat ../../.infracost/usage.yml | sed 's/default_usage: medium/default_usage: high/' > /tmp/usage-high.yml
+          infracost breakdown --path plan.json \
+            --usage-file /tmp/usage-high.yml \
+            --format table \
+            --show-skipped >> /tmp/infracost-output.txt 2>&1 || echo "Failed to generate high estimate"
+
+          # Generate JSON summary for parsing
+          infracost breakdown --path plan.json \
+            --usage-file ../../.infracost/usage.yml \
+            --format json \
+            --out-file /tmp/infracost-summary.json || true
+
+          cd ../../../..
         continue-on-error: true
 
       - name: Comment Cost Estimate
@@ -308,24 +387,42 @@ jobs:
           script: |
             const fs = require('fs');
             let costOutput = 'Cost estimation not available';
+            let monthlyCost = 'N/A';
+            let yearlyCost = 'N/A';
+
             try {
-              const costData = JSON.parse(fs.readFileSync('/tmp/infracost.json', 'utf8'));
-              costOutput = JSON.stringify(costData, null, 2);
+              // Read detailed breakdown
+              costOutput = fs.readFileSync('/tmp/infracost-output.txt', 'utf8');
+
+              // Parse JSON summary for monthly/yearly totals
+              const summary = JSON.parse(fs.readFileSync('/tmp/infracost-summary.json', 'utf8'));
+              if (summary.totalMonthlyCost) {
+                monthlyCost = `$${parseFloat(summary.totalMonthlyCost).toFixed(2)}`;
+                yearlyCost = `$${(parseFloat(summary.totalMonthlyCost) * 12).toFixed(2)}`;
+              }
             } catch (e) {
-              // File might not exist
+              console.error('Error reading cost files:', e);
             }
 
-            const output = `#### Terraform Cost Estimate 💰
+            const output = `## Terraform Cost Estimate 💰
 
-            <details><summary>Show Cost Breakdown</summary>
+            **Monthly Cost:** ${monthlyCost} | **Yearly Cost:** ${yearlyCost}
 
-            \`\`\`json
+            <details><summary>📊 Show Usage-Based Cost Breakdown</summary>
+
+            \`\`\`
             ${costOutput}
             \`\`\`
 
             </details>
 
-            *Note: Cost estimates are approximate. Actual costs may vary.*
+            ### Cost Summary by Scenario
+            - **Low Usage** (~100 streams/month): Minimal cost, personal use
+            - **Medium Usage** (~10K streams/month): Expected production cost
+            - **High Usage** (~100K streams/month): Popular content with high traffic
+
+            ---
+            *Note: Cost estimates are approximate and based on usage assumptions. Actual costs may vary based on real traffic patterns.*
 
             *Pusher: @${{ github.actor }}, Workflow: \`${{ github.workflow }}\`*`;
 

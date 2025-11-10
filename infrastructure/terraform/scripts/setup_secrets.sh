@@ -93,7 +93,7 @@ print_success "jq installed"
 
 print_header "Fetching Secrets Manager Secret Name"
 
-cd "$(dirname "$0")/../infrastructure"
+cd "$(dirname "$0")/../remote-state/02-infrastructure"
 
 if [ ! -f "terraform.tfstate" ] && [ ! -f ".terraform/terraform.tfstate" ]; then
     print_error "Terraform state not found!"

@@ -1,0 +1,37 @@
+{
+  "name": "@music-service/api",
+  "version": "1.0.0",
+  "description": "Music service authentication API (Lambda + API Gateway)",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/handlers/auth-session.ts",
+    "build": "npm run clean && npm run compile && npm run package",
+    "compile": "tsc && node scripts/post-build.js",
+    "package": "cd dist && zip -r auth-session.zip . && cd ..",
+    "clean": "rm -rf dist *.zip",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.927.0",
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.157",
+    "@types/node": "^24.10.0",
+    "@vitest/coverage-v8": "^4.0.8",
+    "esbuild": "^0.27.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

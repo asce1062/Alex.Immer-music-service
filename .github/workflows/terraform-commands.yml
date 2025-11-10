@@ -145,6 +145,26 @@ jobs:
             let planOutput = '';
             try {
               planOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/plan.txt', 'utf8');
+
+              // Sanitize sensitive information for public repository
+              planOutput = planOutput
+                // Redact AWS Account IDs (12-digit numbers in ARNs and resource IDs)
+                .replace(/\d{12}/g, 'XXXXXXXXXXXX')
+                // Redact CloudFront Distribution IDs (pattern: E followed by alphanumeric)
+                .replace(/E[A-Z0-9]{10,}/g, 'EXXXXXXXXXX')
+                // Redact API Gateway IDs (pattern: lowercase alphanumeric, ~10 chars)
+                .replace(/id=([a-z0-9]{7,15})\]/g, 'id=XXXXXXXXXX]')
+                .replace(/vwejavm7x9|ojlx4q7|jkul9wa|6daico/gi, 'XXXXXXXXXX')
+                // Redact CloudFront Key Pair IDs (pattern: K followed by alphanumeric)
+                .replace(/K[A-Z0-9]{10,}/g, 'KXXXXXXXXXX')
+                // Redact secret ARN suffixes (random 6-char suffix after secret name)
+                .replace(/(secret:[^-]+-[^-]+-[A-Za-z0-9]{6})/g, 'secret:REDACTED')
+                // Redact certificate ARNs
+                .replace(/(certificate\/)[a-f0-9-]{36}/g, '$1REDACTED')
+                // Redact specific resource identifiers
+                .replace(/E2NNAMGFKY5A2E/g, 'EXXXXXXXXXX') // OAC ID
+                .replace(/KTMWJPY573MB/g, 'KXXXXXXXXXX')   // Public Key ID
+                .replace(/b70fce4f-1248-4b3e-8e43-43b36647376f/g, 'REDACTED-UUID');
             } catch (e) {
               planOutput = 'Could not read plan output';
             }
@@ -165,6 +185,8 @@ jobs:
             </details>
 
             ${success ? '' : '**Action Required**: Fix the errors above before applying.'}
+
+            **Note**: Sensitive information (Account IDs, Resource IDs, ARNs) has been redacted for security.
 
             *Workflow: \`${{ github.workflow }}\`*`;
 
@@ -255,17 +277,37 @@ jobs:
             let applyOutput = '';
             try {
               applyOutput = fs.readFileSync('infrastructure/terraform/remote-state/${{ matrix.directory }}/apply.txt', 'utf8');
+
+              // Truncate if too long
+              if (applyOutput.length > 60000) {
+                applyOutput = applyOutput.substring(0, 60000) + '\n... (output truncated)';
+              }
+
+              // Sanitize sensitive information for public repository
+              applyOutput = applyOutput
+                // Redact AWS Account IDs (12-digit numbers in ARNs and resource IDs)
+                .replace(/\d{12}/g, 'XXXXXXXXXXXX')
+                // Redact CloudFront Distribution IDs (pattern: E followed by alphanumeric)
+                .replace(/E[A-Z0-9]{10,}/g, 'EXXXXXXXXXX')
+                // Redact API Gateway IDs (pattern: lowercase alphanumeric, ~10 chars)
+                .replace(/id=([a-z0-9]{7,15})\]/g, 'id=XXXXXXXXXX]')
+                .replace(/vwejavm7x9|ojlx4q7|jkul9wa|6daico/gi, 'XXXXXXXXXX')
+                // Redact CloudFront Key Pair IDs (pattern: K followed by alphanumeric)
+                .replace(/K[A-Z0-9]{10,}/g, 'KXXXXXXXXXX')
+                // Redact secret ARN suffixes (random 6-char suffix after secret name)
+                .replace(/(secret:[^-]+-[^-]+-[A-Za-z0-9]{6})/g, 'secret:REDACTED')
+                // Redact certificate ARNs
+                .replace(/(certificate\/)[a-f0-9-]{36}/g, '$1REDACTED')
+                // Redact specific resource identifiers
+                .replace(/E2NNAMGFKY5A2E/g, 'EXXXXXXXXXX') // OAC ID
+                .replace(/KTMWJPY573MB/g, 'KXXXXXXXXXX')   // Public Key ID
+                .replace(/b70fce4f-1248-4b3e-8e43-43b36647376f/g, 'REDACTED-UUID');
             } catch (e) {
               applyOutput = 'Apply did not run or output not available';
             }
 
             const success = '${{ steps.apply.outcome }}' === 'success';
             const icon = success ? '✅' : '❌';
-
-            // Truncate if too long
-            if (applyOutput.length > 60000) {
-              applyOutput = applyOutput.substring(0, 60000) + '\n... (output truncated)';
-            }
 
             const output = `#### Terraform Apply: \`${{ matrix.directory }}\` ${icon}
 
@@ -281,6 +323,8 @@ jobs:
             </details>
 
             ${success ? '' : '**Action Required**: Manual intervention needed.'}
+
+            **Note**: Sensitive information (Account IDs, Resource IDs, ARNs) has been redacted for security.
 
             *Workflow: \`${{ github.workflow }}\`*`;
 
