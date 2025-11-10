@@ -1,8 +1,24 @@
 """Metadata extraction utilities for MP3 and tracker files.
 
-Handles comprehensive ID3 tag extraction and file metadata.
+Handles comprehensive ID3 tag extraction and file metadata for v3 manifest generation.
+
+v3 Schema Enhancements:
+- Normalized numeric fields: duration_seconds (int), file_size_bytes (int),
+  bit_rate_kbps (int) - machine-readable alongside human-readable formats
+- SHA256 checksums: File integrity verification with algorithm, value, and verified_at
+- HTTP range support: content_length, last_modified (ISO 8601), accept_ranges, etag
+- Content rating: explicit boolean from ID3 tags (ITUNESADVISORY, genre)
+- Tracker metadata: source_format_version, tracker_tools from binary file parsing
+
+Functions:
+- extract_mp3_metadata(): Extract ID3 tags with v3 fields from MP3 files
+- extract_tracker_metadata(): Extract tracker format metadata with v3 fields
+- normalize_duration(): Convert seconds to both numeric and human-readable
+- normalize_file_size(): Convert bytes to both numeric and human-readable
+- detect_explicit_content(): Content rating from ID3 tags
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import quote
@@ -12,6 +28,7 @@ from mutagen.id3._frames import APIC
 from mutagen.id3._util import ID3NoHeaderError
 from mutagen.mp3 import MP3
 
+from .cache_utils import calculate_etag, calculate_file_sha256
 from .config import Config
 from .id_utils import (
     extract_title_from_filename,
@@ -20,6 +37,7 @@ from .id_utils import (
     generate_tracker_id,
     get_file_created_iso8601,
 )
+from .tracker_parser import extract_tracker_format_metadata
 
 
 class APICLike(Protocol):
@@ -28,6 +46,137 @@ class APICLike(Protocol):
     data: bytes
     mime: str
     desc: str
+
+
+# ============================================================================
+# Normalization Utilities
+# ============================================================================
+
+
+def normalize_duration(seconds: float) -> dict[str, Any]:
+    """Normalize duration to both numeric and human-readable formats.
+
+    Args:
+        seconds: Duration in seconds
+
+    Returns:
+        Dict with duration_seconds (int) and duration_human (str)
+
+    Examples:
+        >>> normalize_duration(145.5)
+        {'duration_seconds': 145, 'duration_human': '2 min 25'}
+    """
+    duration_seconds = int(seconds)
+    mins = duration_seconds // 60
+    secs = duration_seconds % 60
+    duration_human = f"{mins} min {secs:02d}"
+
+    return {
+        "duration_seconds": duration_seconds,
+        "duration_human": duration_human,
+    }
+
+
+def normalize_file_size(num_bytes: int) -> dict[str, Any]:
+    """Normalize file size to both bytes and human-readable formats.
+
+    Args:
+        num_bytes: File size in bytes
+
+    Returns:
+        Dict with file_size_bytes (int) and file_size_human (str)
+
+    Examples:
+        >>> normalize_file_size(6123520)
+        {'file_size_bytes': 6123520, 'file_size_human': '5.84 MiB'}
+    """
+    mib = num_bytes / (1024 * 1024)
+    return {
+        "file_size_bytes": num_bytes,
+        "file_size_human": f"{mib:.2f} MiB",
+    }
+
+
+def normalize_bpm(bpm_str: str) -> float | None:
+    """Normalize BPM string to numeric value.
+
+    Args:
+        bpm_str: BPM as string (e.g., "120.5", "120")
+
+    Returns:
+        Float BPM value or None if invalid
+
+    Examples:
+        >>> normalize_bpm("120.5")
+        120.5
+        >>> normalize_bpm("invalid")
+        None
+    """
+    try:
+        return float(bpm_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def normalize_bit_rate(bit_rate_str: str) -> int | None:
+    """Normalize bit rate string to kbps integer.
+
+    Args:
+        bit_rate_str: Bit rate string (e.g., "320 kb/s", "320")
+
+    Returns:
+        Integer kbps value or None if invalid
+
+    Examples:
+        >>> normalize_bit_rate("320 kb/s")
+        320
+        >>> normalize_bit_rate("192")
+        192
+    """
+    try:
+        # Remove common suffixes
+        cleaned = bit_rate_str.replace("kb/s", "").replace("kbps", "").strip()
+        return int(cleaned)
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def get_file_last_modified_iso8601(file_path: Path) -> str:
+    """Get file last modified timestamp in ISO 8601 format.
+
+    Args:
+        file_path: Path to file
+
+    Returns:
+        ISO 8601 timestamp string (e.g., "2025-11-10T12:00:00Z")
+    """
+    mtime = file_path.stat().st_mtime
+    dt = datetime.fromtimestamp(mtime, tz=UTC)
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def detect_explicit_content(metadata: dict[str, Any]) -> bool:
+    """Detect explicit content from metadata.
+
+    Currently returns False by default. Can be enhanced to:
+    - Check ID3 COMM (comments) for explicit markers
+    - Check genre for explicit indicators
+    - Use external API for content rating
+
+    Args:
+        metadata: Existing metadata dict
+
+    Returns:
+        Boolean indicating explicit content
+    """
+    # Check for explicit markers in comments
+    comment = metadata.get("comment", "").lower()
+    if any(marker in comment for marker in ["explicit", "parental advisory", "18+"]):
+        return True
+
+    # Check genre
+    genre = metadata.get("genre", "").lower()
+    return "explicit" in genre
 
 
 def format_duration(seconds: float) -> str:
@@ -85,7 +234,6 @@ def extract_mp3_metadata(
     - Album, performer, composer, genre, etc.
     - Embedded cover art information
     - Comments and URLs
-    - V2 fields: track_id, album_id, cdn_url, s3_url, linked_tracker array
 
     Args:
         mp3_path: Path to MP3 file
@@ -133,7 +281,6 @@ def extract_mp3_metadata(
         print(f"    Warning: Failed reading audio info for {mp3_path}: {e}")
         info = None
 
-    # === V2 FIELDS ===
     # Generate IDs
     if album_name:
         metadata["album_id"] = generate_album_id(album_name)
@@ -175,18 +322,28 @@ def extract_mp3_metadata(
         metadata["complete_name"] = f"{config.cdn_base}/albums/{quote(mp3_path.name)}"
 
     metadata["format"] = "MPEG Audio"
-    metadata["file_size"] = human_filesize(mp3_path.stat().st_size)
+
+    # File size: normalized (both bytes and human-readable)
+    file_stat = mp3_path.stat()
+    file_size_data = normalize_file_size(file_stat.st_size)
+    metadata["file_size_bytes"] = file_size_data["file_size_bytes"]
+    metadata["file_size"] = file_size_data["file_size_human"]  # Legacy field
 
     # Audio information
     if info:
-        metadata["duration"] = format_duration(info.length)
+        # Duration: normalized (both seconds and human-readable)
+        duration_data = normalize_duration(info.length)
+        metadata["duration_seconds"] = duration_data["duration_seconds"]
+        metadata["duration"] = duration_data["duration_human"]  # Legacy field
 
         # Cast to Any to access mutagen internal _Info attributes
         info_any: Any = info
 
-        # Bitrate
+        # Bitrate: normalized (both kbps numeric and string)
         if hasattr(info_any, "bitrate") and info_any.bitrate:
-            metadata["overall_bit_rate"] = f"{int(info_any.bitrate / 1000)} kb/s"
+            bit_rate_kbps = int(info_any.bitrate / 1000)
+            metadata["bit_rate_kbps"] = bit_rate_kbps
+            metadata["overall_bit_rate"] = f"{bit_rate_kbps} kb/s"  # Legacy field
 
         # Format version (MPEG version)
         if hasattr(info_any, "version") and info_any.version is not None:
@@ -237,6 +394,13 @@ def extract_mp3_metadata(
             val = get_text(frame)
             if val:
                 metadata[key] = val
+
+        # Normalize BPM to numeric value
+        if "bpm" in metadata:
+            bpm_numeric = normalize_bpm(metadata["bpm"])
+            if bpm_numeric is not None:
+                metadata["bpm_numeric"] = bpm_numeric
+                # Keep original string for backwards compatibility
 
         # Parse part/position into separate fields if needed
         if "part_position" in metadata:
@@ -324,7 +488,24 @@ def extract_mp3_metadata(
     # Mark track as released if in albums/ directory
     metadata["released"] = True  # All MP3s in albums/ are released
 
-    # === Build linked_tracker array (v2) ===
+    # Integrity - SHA256 checksum for file verification
+    sha256_checksum = calculate_file_sha256(mp3_path)
+    metadata["checksum"] = {
+        "algorithm": "sha256",
+        "value": sha256_checksum.replace("sha256:", ""),  # Store without prefix
+        "verified_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    # HTTP Range Support - for media streaming
+    metadata["content_length"] = file_stat.st_size
+    metadata["last_modified"] = get_file_last_modified_iso8601(mp3_path)
+    metadata["accept_ranges"] = "bytes"
+    metadata["etag"] = calculate_etag(mp3_path)
+
+    # Explicit content rating
+    metadata["explicit"] = detect_explicit_content(metadata)
+
+    # === Build linked_tracker array ===
     if linked_trackers and album_name:
         # Deduplicate trackers by filename (same file appears in two locations)
         seen_trackers: dict[str, Path] = {}
@@ -364,10 +545,17 @@ def extract_mp3_metadata(
                 albums_path = f"albums/{quote(album_name)}/tracker/{quote(tracker_path.name)}"
                 tracker_path_str = f"tracker/albums/{quote(album_name)}/{quote(tracker_path.name)}"
 
+            # Add tracker file size and checksum
+            tracker_stat = tracker_path.stat()
+            tracker_file_size = normalize_file_size(tracker_stat.st_size)
+            tracker_checksum = calculate_file_sha256(tracker_path)
+
             tracker_entry = {
                 "tracker_id": tracker_id,
                 "tracker_title": tracker_title,
                 "format": ext,
+                "file_size_bytes": tracker_file_size["file_size_bytes"],
+                "checksum": tracker_checksum.replace("sha256:", ""),
                 "albums_cdn_url": f"{config.cdn_base_url}/{albums_path}",
                 "albums_s3_url": f"{config.s3_base_url}/{albums_path}",
                 "tracker_cdn_url": f"{config.cdn_base_url}/{tracker_path_str}",
@@ -399,30 +587,10 @@ def extract_tracker_metadata(
         linked_master: Info about the linked MP3 (track_id, track_name)
 
     Returns:
-        Dict containing tracker metadata with v2 fields
-
-    Example output:
-        {
-            "tracker_id": "8bit-seduction-01-the-day-they-landed",
-            "title": "The Day They Landed",
-            "file_name": "01.The-Day-They-Landed.xm",
-            "format": "xm",
-            "file_size": "0.15 MiB",
-            "created": "2025-03-14T00:00:00Z",
-            "composer": "Alex.Immer",
-            "albums_cdn_url": "https://cdn.../albums/Album/tracker/file.xm",
-            "albums_s3_url": "https://s3.../albums/Album/tracker/file.xm",
-            "tracker_cdn_url": "https://cdn.../tracker/albums/Album/file.xm",
-            "tracker_s3_url": "https://s3.../tracker/albums/Album/file.xm",
-            "linked_master": {
-                "track_id": "8bit-seduction-01-the-day-they-landed",
-                "track_name": "The Day They Landed"
-            }
-        }
+        Dict containing tracker metadata
     """
     metadata: dict[str, Any] = {}
 
-    # === V2 FIELDS ===
     # Generate tracker_id
     metadata["tracker_id"] = generate_tracker_id(album_name, tracker_path.name)
 
@@ -431,7 +599,12 @@ def extract_tracker_metadata(
 
     # File info
     metadata["file_name"] = tracker_path.name
-    metadata["file_size"] = human_filesize(tracker_path.stat().st_size)
+
+    # File size: normalized (both bytes and human-readable)
+    file_stat = tracker_path.stat()
+    file_size_data = normalize_file_size(file_stat.st_size)
+    metadata["file_size_bytes"] = file_size_data["file_size_bytes"]
+    metadata["file_size"] = file_size_data["file_size_human"]  # Legacy field
 
     # Format (extension only, e.g., "xm" not "Extended Module")
     ext = tracker_path.suffix.lower().lstrip(".")
@@ -442,6 +615,45 @@ def extract_tracker_metadata(
 
     # Composer (default from config)
     metadata["composer"] = config.default_composer
+
+    # Parse tracker format for detailed metadata (channels, patterns, tools, etc.)
+    format_metadata = extract_tracker_format_metadata(tracker_path)
+    if format_metadata:
+        # Add format-specific metadata
+        metadata["source_format_version"] = format_metadata.get("source_format_version", "unknown")
+        metadata["tracker_tools"] = format_metadata.get("tracker_tools", ["Unknown"])
+
+        # Optional: Add additional format details if available
+        if "channels" in format_metadata:
+            metadata["channels"] = format_metadata["channels"]
+        if "patterns" in format_metadata:
+            metadata["patterns"] = format_metadata["patterns"]
+        if "instruments" in format_metadata:
+            metadata["instruments"] = format_metadata["instruments"]
+        if "samples" in format_metadata:
+            metadata["samples"] = format_metadata["samples"]
+        if format_metadata.get("song_name"):
+            metadata["song_name"] = format_metadata["song_name"]
+    else:
+        # Fallback if parsing fails
+        metadata["source_format_version"] = "unknown"
+        metadata["tracker_tools"] = ["Unknown"]
+
+    # Integrity - SHA256 checksum
+    sha256_checksum = calculate_file_sha256(tracker_path)
+    metadata["checksum"] = {
+        "algorithm": "sha256",
+        "value": sha256_checksum.replace("sha256:", ""),
+    }
+
+    # HTTP Range Support
+    metadata["content_length"] = file_stat.st_size
+    metadata["last_modified"] = get_file_last_modified_iso8601(tracker_path)
+    metadata["accept_ranges"] = "bytes"
+    metadata["etag"] = calculate_etag(tracker_path)
+
+    # Explicit content rating (default: False for tracker files)
+    metadata["explicit"] = False
 
     # Legacy fields for backwards compatibility
     metadata["linked"] = linked
@@ -468,7 +680,7 @@ def extract_tracker_metadata(
     elif not linked:
         metadata["album"] = "unreleased"
 
-    # === Dual URL Paths (V2) ===
+    # === Dual URL Paths ===
     # Tracker files exist in TWO locations:
     # 1. albums/{album}/[Extras/]tracker/{file}  (albums_*_url)
     # 2. tracker/albums/{album}/[Extras/]{file}  (tracker_*_url)

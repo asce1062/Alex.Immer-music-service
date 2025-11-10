@@ -1,4 +1,4 @@
-"""ID generation and utility functions for metadata v2.
+"""ID generation and utility functions for metadata.
 
 Provides functions for generating normalized, URL-safe IDs and calculating
 aggregate statistics for enterprise-grade metadata.

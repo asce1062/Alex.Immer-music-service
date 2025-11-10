@@ -101,7 +101,7 @@ from utils.upload_utils import (
     upload_trackers,
 )
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 
 
 def cmd_sanitize(config: Config, dry_run: bool = False) -> None:
