@@ -2,7 +2,7 @@
  * API Response Utility Functions
  */
 
-import type { APIGatewayProxyResultV2 } from 'aws-lambda';
+import type { APIGatewayProxyStructuredResultV2 } from 'aws-lambda';
 import type { SessionResponse, ErrorResponse } from '../types/index.js';
 import { getCorsHeaders } from './cors.js';
 
@@ -13,7 +13,7 @@ export function successResponse(
   data: SessionResponse,
   cookies: string[],
   origin?: string
-): APIGatewayProxyResultV2 {
+): APIGatewayProxyStructuredResultV2 {
   return {
     statusCode: 200,
     headers: {
@@ -33,7 +33,7 @@ export function errorResponse(
   error: string,
   message: string,
   origin?: string
-): APIGatewayProxyResultV2 {
+): APIGatewayProxyStructuredResultV2 {
   const response: ErrorResponse = {
     error,
     message,
@@ -52,35 +52,47 @@ export function errorResponse(
 /**
  * Create 400 Bad Request response
  */
-export function badRequestResponse(message: string, origin?: string): APIGatewayProxyResultV2 {
+export function badRequestResponse(
+  message: string,
+  origin?: string
+): APIGatewayProxyStructuredResultV2 {
   return errorResponse(400, 'bad_request', message, origin);
 }
 
 /**
  * Create 401 Unauthorized response
  */
-export function unauthorizedResponse(message: string, origin?: string): APIGatewayProxyResultV2 {
+export function unauthorizedResponse(
+  message: string,
+  origin?: string
+): APIGatewayProxyStructuredResultV2 {
   return errorResponse(401, 'unauthorized', message, origin);
 }
 
 /**
  * Create 403 Forbidden response
  */
-export function forbiddenResponse(message: string, origin?: string): APIGatewayProxyResultV2 {
+export function forbiddenResponse(
+  message: string,
+  origin?: string
+): APIGatewayProxyStructuredResultV2 {
   return errorResponse(403, 'forbidden', message, origin);
 }
 
 /**
  * Create 500 Internal Server Error response
  */
-export function internalErrorResponse(message: string, origin?: string): APIGatewayProxyResultV2 {
+export function internalErrorResponse(
+  message: string,
+  origin?: string
+): APIGatewayProxyStructuredResultV2 {
   return errorResponse(500, 'internal_error', message, origin);
 }
 
 /**
  * Handle CORS preflight requests
  */
-export function corsPreflightResponse(origin?: string): APIGatewayProxyResultV2 {
+export function corsPreflightResponse(origin?: string): APIGatewayProxyStructuredResultV2 {
   return {
     statusCode: 204,
     headers: getCorsHeaders(origin),

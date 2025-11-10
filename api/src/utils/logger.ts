@@ -16,8 +16,8 @@ export const logger = pino({
     },
   },
   timestamp: pino.stdTimeFunctions.isoTime,
-  // Disable pretty printing in production for CloudWatch JSON parsing
-  ...(process.env.NODE_ENV === 'production'
+  // Disable pretty printing in production/test for CloudWatch JSON parsing
+  ...(process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test'
     ? {}
     : {
         transport: {
