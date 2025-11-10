@@ -27,6 +27,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "= 5.72.1" # Pinned to exact version for stability
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2" # For DNS validation instructions display
+    }
   }
 }
 

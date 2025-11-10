@@ -610,7 +610,7 @@ show-secrets: ## Show all secrets in Secrets Manager (names only)
 	@echo "$(BLUE)Secrets Manager Secrets:$(NC)"
 	@aws secretsmanager list-secrets --query 'SecretList[?starts_with(Name, `music-service`)].Name' --output table
 
-show-dns-setup: ## Show DNS configuration for Netlify (api.alexmbugua.me)
+show-dns-setup: ## Show DNS configuration for Netlify (music-api.alexmbugua.me)
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
 	@echo "$(CYAN)║  $(BLUE)Netlify DNS Setup Instructions$(CYAN)                        ║$(NC)"
 	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"

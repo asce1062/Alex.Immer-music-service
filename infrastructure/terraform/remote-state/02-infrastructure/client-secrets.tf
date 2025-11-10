@@ -41,9 +41,23 @@ resource "aws_secretsmanager_secret_version" "client_alexmbugua_personal" {
   secret_id = aws_secretsmanager_secret.client_alexmbugua_personal.id
 
   secret_string = jsonencode({
-    client_id             = "alexmbugua-personal"
-    client_secret         = "PLACEHOLDER-GENERATE-WITH-SCRIPT"
-    allowed_origins       = ["https://alexmbugua.me", "https://www.alexmbugua.me", "http://localhost:4321", "http://localhost:3000"]
+    client_id     = "alexmbugua-personal"
+    client_secret = "PLACEHOLDER-GENERATE-WITH-SCRIPT"
+    allow_origins = [
+      "https://alexmbugua.me",
+      "https://www.alexmbugua.me",
+      "http://localhost:4321",
+      "http://localhost:4322",
+      "http://localhost:3000",
+      "http://localhost:8080",
+      "http://localhost:8888",
+      "http://127.0.0.1:4321",
+      "http://127.0.0.1:4322",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:8080",
+      "http://127.0.0.1:8888",
+      "https://alexmbugua.netlify.app"
+    ]
     description           = "Personal portfolio/blog music player"
     cookie_duration_hours = 2
     created_at            = timestamp()
@@ -55,7 +69,7 @@ resource "aws_secretsmanager_secret_version" "client_alexmbugua_personal" {
 }
 
 # ============================================================================
-# Client 2: Dedicated Web App (asce1062.github.io or music-app.alexmbugua.me)
+# Client 2: Dedicated Web App (asce1062.github.io or music.alexmbugua.me)
 # ============================================================================
 resource "aws_secretsmanager_secret" "client_music_app_web" {
   name        = "music-service/clients/music-app-web"
@@ -73,9 +87,23 @@ resource "aws_secretsmanager_secret_version" "client_music_app_web" {
   secret_id = aws_secretsmanager_secret.client_music_app_web.id
 
   secret_string = jsonencode({
-    client_id             = "music-app-web"
-    client_secret         = "PLACEHOLDER-GENERATE-WITH-SCRIPT"
-    allowed_origins       = ["https://asce1062.github.io", "https://music-app.alexmbugua.me", "http://localhost:4321", "http://localhost:3000"]
+    client_id     = "music-app-web"
+    client_secret = "PLACEHOLDER-GENERATE-WITH-SCRIPT"
+    allow_origins = [
+      "https://asce1062.github.io",
+      "https://music.alexmbugua.me",
+      "http://localhost:4321",
+      "http://localhost:4322",
+      "http://localhost:3000",
+      "http://localhost:8080",
+      "http://localhost:8888",
+      "http://127.0.0.1:4321",
+      "http://127.0.0.1:4322",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:8080",
+      "http://127.0.0.1:8888",
+      "https://alexmbugua.netlify.app"
+    ]
     description           = "Dedicated music web application"
     cookie_duration_hours = 2
     created_at            = timestamp()
@@ -97,7 +125,7 @@ resource "aws_secretsmanager_secret" "client_music_app_mobile" {
     Name        = "client-alex-immer-mobile"
     Environment = var.environment
     ClientType  = "mobile"
-    Purpose     = "Alex Immer iOS and Android app authentication"
+    Purpose     = "Alex.Immer iOS and Android app authentication"
   }
 }
 

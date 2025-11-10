@@ -14,7 +14,7 @@ Output:
 
 import json
 import secrets
-from datetime import datetime
+from datetime import UTC, datetime
 
 
 def generate_client_secret(length: int = 64) -> str:
@@ -31,13 +31,17 @@ def main():
             "allowed_origins": [
                 "https://alexmbugua.me",
                 "https://www.alexmbugua.me",
-                "https://alexmbugua.netlify.app",
                 "http://localhost:4321",
                 "http://localhost:4322",
+                "http://localhost:3000",
+                "http://localhost:8080",
                 "http://localhost:8888",
                 "http://127.0.0.1:4321",
                 "http://127.0.0.1:4322",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:8080",
                 "http://127.0.0.1:8888",
+                "https://alexmbugua.netlify.app",
             ],
         },
         {
@@ -48,8 +52,15 @@ def main():
                 "https://music.alexmbugua.me",
                 "http://localhost:4321",
                 "http://localhost:4322",
+                "http://localhost:3000",
+                "http://localhost:8080",
+                "http://localhost:8888",
                 "http://127.0.0.1:4321",
                 "http://127.0.0.1:4322",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:8080",
+                "http://127.0.0.1:8888",
+                "https://alexmbugua.netlify.app",
             ],
         },
         {
@@ -77,7 +88,7 @@ def main():
             "allowed_origins": client["allowed_origins"],
             "description": client["description"],
             "cookie_duration_hours": 2,
-            "created_at": datetime.utcnow().isoformat() + "Z",
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         print(f"Client: {client['client_id']}")

@@ -12,10 +12,16 @@ export function getCorsHeaders(origin?: string): Record<string, string> {
     'https://asce1062.github.io',
     'https://music.alexmbugua.me',
     'http://localhost:4321',
+    'http://localhost:4322',
     'http://localhost:3000',
     'http://localhost:8080',
+    'http://localhost:8888',
     'http://127.0.0.1:4321',
+    'http://127.0.0.1:4322',
     'http://127.0.0.1:3000',
+    'http://127.0.0.1:8080',
+    'http://127.0.0.1:8888',
+    'https://alexmbugua.netlify.app',
   ];
 
   // Check if origin is allowed and use it, otherwise fallback to first allowed origin

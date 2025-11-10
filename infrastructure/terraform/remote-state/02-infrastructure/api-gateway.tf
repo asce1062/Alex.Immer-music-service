@@ -1,17 +1,18 @@
 # ============================================================================
-# API Gateway + Lambda for Music Service Authentication
+# API Gateway - Core Infrastructure
 # ============================================================================
-# This module provisions:
-# - Lambda function for client authentication and signed cookie generation
-# - API Gateway HTTP API for RESTful endpoints
+# This file provisions the core API Gateway infrastructure:
+# - API Gateway HTTP API
+# - Default stage with logging
+# - Custom domain configuration
 # - IAM roles and policies for Lambda execution
-# - CloudWatch logs for monitoring
+# - Global CloudWatch alarms
 #
-# API Endpoints:
-# - POST /v1/session - Authenticate client and issue signed cookies
+# API Endpoints are defined in separate files:
+# - session.tf - POST /v1/session (authentication)
 #
 # Architecture:
-# Client → API Gateway → Lambda → Secrets Manager → CloudFront Signed Cookies
+# Client → API Gateway → Lambda Functions → Backend Services
 # ============================================================================
 
 # ============================================================================
@@ -97,45 +98,11 @@ resource "aws_iam_role_policy" "lambda_secrets_access" {
 }
 
 # ============================================================================
-# Lambda Function
+# Lambda Functions
 # ============================================================================
-resource "aws_lambda_function" "auth_session" {
-  filename         = "${path.module}/lambda/auth-session.zip"
-  function_name    = "music-service-auth-session-${var.environment}"
-  role             = aws_iam_role.lambda_execution.arn
-  handler          = "index.handler"
-  runtime          = "nodejs20.x"
-  architectures    = ["arm64"] # Use Graviton for cost optimization (~20% savings)
-  timeout          = 10
-  memory_size      = 256
-  source_code_hash = fileexists("${path.module}/lambda/auth-session.zip") ? filebase64sha256("${path.module}/lambda/auth-session.zip") : null
-
-  environment {
-    variables = {
-      SIGNING_KEY_SECRET_NAME = aws_secretsmanager_secret.cloudfront_signing_key.name
-      CLIENTS_SECRET_PREFIX   = "music-service/clients/"
-      CDN_DOMAIN              = var.cname_primary
-      ENVIRONMENT             = var.environment
-      NODE_ENV                = var.environment == "production" ? "production" : "development"
-    }
-  }
-
-  tags = {
-    Name    = "music-service-auth-session"
-    Purpose = "Client authentication and signed cookie generation"
-  }
-}
-
-# CloudWatch Log Group for Lambda
-resource "aws_cloudwatch_log_group" "lambda_auth_session" {
-  name              = "/aws/lambda/${aws_lambda_function.auth_session.function_name}"
-  retention_in_days = 7
-
-  tags = {
-    Name        = "lambda-auth-session-logs"
-    Environment = var.environment
-  }
-}
+# Lambda functions are defined in endpoint-specific files:
+# - session.tf - auth_session Lambda function
+# ============================================================================
 
 # ============================================================================
 # API Gateway HTTP API
@@ -150,12 +117,18 @@ resource "aws_apigatewayv2_api" "music_service" {
       "https://alexmbugua.me",
       "https://www.alexmbugua.me",
       "https://asce1062.github.io",
-      "https://music-app.alexmbugua.me",
+      "https://music.alexmbugua.me",
       "http://localhost:4321",
+      "http://localhost:4322",
       "http://localhost:3000",
       "http://localhost:8080",
+      "http://localhost:8888",
       "http://127.0.0.1:4321",
-      "http://127.0.0.1:3000"
+      "http://127.0.0.1:4322",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:8080",
+      "http://127.0.0.1:8888",
+      "https://alexmbugua.netlify.app",
     ]
     allow_methods     = ["POST", "OPTIONS", "GET"]
     allow_headers     = ["content-type", "x-client-id", "x-client-secret", "authorization"]
@@ -208,37 +181,17 @@ resource "aws_cloudwatch_log_group" "api_gateway_logs" {
 }
 
 # ============================================================================
-# API Gateway Integration with Lambda
+# API Gateway Routes and Integrations
 # ============================================================================
-resource "aws_apigatewayv2_integration" "auth_session" {
-  api_id                 = aws_apigatewayv2_api.music_service.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.auth_session.invoke_arn
-  integration_method     = "POST"
-  payload_format_version = "2.0"
-}
-
-# API Gateway Route for POST /v1/session
-resource "aws_apigatewayv2_route" "auth_session" {
-  api_id    = aws_apigatewayv2_api.music_service.id
-  route_key = "POST /v1/session"
-  target    = "integrations/${aws_apigatewayv2_integration.auth_session.id}"
-}
-
-# Lambda Permission for API Gateway
-resource "aws_lambda_permission" "api_gateway_invoke" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.auth_session.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.music_service.execution_arn}/*/*"
-}
+# Routes and integrations are defined in endpoint-specific files:
+# - session.tf - POST /v1/session route and integration
+# ============================================================================
 
 # ============================================================================
-# Custom Domain - api.alexmbugua.me
+# Custom Domain - music-api.alexmbugua.me
 # ============================================================================
 resource "aws_apigatewayv2_domain_name" "api" {
-  domain_name = "api.alexmbugua.me"
+  domain_name = "music-api.alexmbugua.me"
 
   domain_name_configuration {
     certificate_arn = aws_acm_certificate.api.arn
@@ -262,29 +215,11 @@ resource "aws_apigatewayv2_api_mapping" "api" {
 }
 
 # ============================================================================
-# CloudWatch Alarms for Monitoring
+# CloudWatch Alarms - Global API Gateway Monitoring
 # ============================================================================
-resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
-  alarm_name          = "music-service-lambda-errors-${var.environment}"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "Errors"
-  namespace           = "AWS/Lambda"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = 10
-  alarm_description   = "Alert when Lambda errors exceed threshold"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    FunctionName = aws_lambda_function.auth_session.function_name
-  }
-
-  tags = {
-    Name        = "lambda-errors-alarm"
-    Environment = var.environment
-  }
-}
+# Lambda-specific alarms are defined in endpoint-specific files:
+# - session.tf - auth_session Lambda errors alarm
+# ============================================================================
 
 resource "aws_cloudwatch_metric_alarm" "api_gateway_5xx" {
   alarm_name          = "music-service-api-5xx-${var.environment}"
@@ -332,25 +267,20 @@ output "api_gateway_domain_target" {
 }
 
 output "netlify_dns_setup_instructions" {
-  description = "DNS records to add in Netlify for api.alexmbugua.me"
+  description = "DNS records to add in Netlify for music-api.alexmbugua.me"
   value = {
     api_cname = {
-      name  = "api.alexmbugua.me"
+      name  = "music-api.alexmbugua.me"
       type  = "CNAME"
       value = aws_apigatewayv2_domain_name.api.domain_name_configuration[0].target_domain_name
       ttl   = "3600"
-      note  = "Points api.alexmbugua.me to API Gateway"
+      note  = "Points music-api.alexmbugua.me to API Gateway"
     }
     instructions = "Go to Netlify Dashboard → Domains → DNS Settings → Add DNS Record"
   }
 }
 
-output "lambda_function_name" {
-  description = "Lambda function name"
-  value       = aws_lambda_function.auth_session.function_name
-}
-
-output "lambda_function_arn" {
-  description = "Lambda function ARN"
-  value       = aws_lambda_function.auth_session.arn
-}
+# ============================================================================
+# Lambda outputs are in endpoint-specific files:
+# - session.tf - auth_session Lambda outputs
+# ============================================================================
