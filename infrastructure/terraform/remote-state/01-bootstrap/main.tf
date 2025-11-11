@@ -115,6 +115,11 @@ resource "aws_iam_user_policy_attachment" "cloudwatch_full_access" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchFullAccess"
 }
 
+resource "aws_iam_user_policy_attachment" "ssm_full_access" {
+  user       = aws_iam_user.deployer.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMFullAccess"
+}
+
 # ============================================================================
 # Custom Scoped IAM Policy (Sensitive IAM Operations Only)
 # ============================================================================

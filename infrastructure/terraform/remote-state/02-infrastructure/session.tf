@@ -10,7 +10,7 @@
 # Purpose: Authenticate client and issue CloudFront signed cookies
 #
 # Architecture:
-# Client → API Gateway → Lambda → Secrets Manager → CloudFront Signed Cookies
+# Client → API Gateway → Lambda → Parameter Store/Secrets Manager → CloudFront Signed Cookies
 # ============================================================================
 
 # ============================================================================
@@ -30,7 +30,7 @@ resource "aws_lambda_function" "auth_session" {
   environment {
     variables = {
       SIGNING_KEY_SECRET_NAME = aws_secretsmanager_secret.cloudfront_signing_key.name
-      CLIENTS_SECRET_PREFIX   = "music-service/clients/"
+      CLIENTS_SECRET_PREFIX   = "/music-service/clients/"
       CDN_DOMAIN              = var.cname_primary
       ENVIRONMENT             = var.environment
       NODE_ENV                = var.environment == "production" ? "production" : "development"

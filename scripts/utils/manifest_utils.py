@@ -321,22 +321,6 @@ def build_master_manifest(
 ) -> dict[str, Any]:
     """Build manifest.json (master manifest) - Production-grade format.
 
-    Production Format (v1.0.0):
-    {
-        "schema_version": "1.0.0",
-        "generated_at": "2025-10-31T21:04:00Z",
-        "artist": {...},
-        "catalog": {...},
-        "resources": {...},
-        "covers": {...},
-        "cdn": {...},
-        "albums": [...],
-        "tracker_files": {...},
-        "integrity": {...},
-        "service_worker": {...},
-        "api": {...}
-    }
-
     Args:
         albums_count: Total number of albums
         tracks_count: Total number of tracks
@@ -382,12 +366,19 @@ def build_master_manifest(
         "cache_info": get_manifest_cache_info(),  # cache strategy
         "artist": {
             "name": default_artist,
-            "url": "https://alexmbugua.me",
-            "contact": "contact@alexmbugua.me",
+            "url": "https://music.alexmbugua.me",
+            "contact": "tnkratos@gmail.com",
             "socials": {
                 "soundcloud": "https://soundcloud.com/aleximmer",
                 "github": "https://github.com/asce1062",
-                "bandcamp": "https://aleximmer.bandcamp.com",
+                "website": "https://alexmbugua.me",
+                "x": "https://x.com/alex_immer",
+                "discord": "https://discord.com/users/asce1062",
+                "facebook": "https://www.facebook.com/kaizoku.asce",
+                "youtube": "https://www.youtube.com/@asce1062",
+                "steam": "https://steamcommunity.com/id/alexasce",
+                "reddit": "https://www.reddit.com/user/asce1062/",
+                "linkedin": "https://www.linkedin.com/in/alex-mbugua",
             },
         },
         "catalog": {

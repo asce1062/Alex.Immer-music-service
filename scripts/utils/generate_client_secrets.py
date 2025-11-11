@@ -2,14 +2,16 @@
 """Generate Client Secrets for Music Service API
 
 This script generates cryptographically secure random secrets for client authentication.
-Use these secrets to populate AWS Secrets Manager after running terraform apply.
+Use these secrets to populate AWS Systems Manager Parameter Store after running terraform apply.
+
+Migration Note: Migrated from Secrets Manager to Parameter Store for cost optimization.
 
 Usage:
-    python scripts/generate_client_secrets.py
+    python scripts/utils/generate_client_secrets.py
 
 Output:
     Displays client ID and generated secret for each client.
-    Copy these values to AWS Secrets Manager.
+    Copy these values to AWS Parameter Store.
 """
 
 import json
@@ -80,7 +82,7 @@ def main():
 
     for client in clients:
         client_secret = generate_client_secret()
-        secret_name = f"music-service/clients/{client['client_id']}"
+        parameter_name = f"/music-service/clients/{client['client_id']}"
 
         secret_value = {
             "client_id": client["client_id"],
@@ -93,15 +95,17 @@ def main():
 
         print(f"Client: {client['client_id']}")
         print(f"Description: {client['description']}")
-        print(f"Secret Name: {secret_name}")
-        print("Secret Value:")
+        print(f"Parameter Name: {parameter_name}")
+        print("Parameter Value:")
         print(json.dumps(secret_value, indent=2))
         print()
-        print("AWS CLI Command to update secret:")
+        print("AWS CLI Command to update parameter:")
         print(
-            f"aws secretsmanager put-secret-value \\\n"
-            f"  --secret-id {secret_name} \\\n"
-            f"  --secret-string '{json.dumps(secret_value)}'"
+            f"aws ssm put-parameter \\\n"
+            f"  --name {parameter_name} \\\n"
+            f"  --type SecureString \\\n"
+            f"  --value '{json.dumps(secret_value)}' \\\n"
+            f"  --overwrite"
         )
         print()
         print("-" * 80)
@@ -111,16 +115,19 @@ def main():
     print()
     print("📋 Next steps:")
     print()
-    print("1. Run terraform apply to create the secret resources")
-    print("2. Use the AWS CLI commands above to update each secret")
-    print("3. Verify secrets are stored correctly:")
+    print("1. Run terraform apply to create the parameter resources")
+    print("2. Use the AWS CLI commands above to update each parameter")
+    print("3. Verify parameters are stored correctly:")
     print(
-        "   aws secretsmanager get-secret-value --secret-id music-service/clients/alexmbugua-personal"  # noqa: E501
+        "   aws ssm get-parameter --name /music-service/clients/alexmbugua-personal --with-decryption"  # noqa: E501
     )
     print()
     print("⚠️  IMPORTANT: Keep these secrets secure!")
     print("   Do NOT commit them to version control.")
-    print("   Store them in AWS Secrets Manager only.")
+    print("   Store them in AWS Parameter Store only.")
+    print()
+    print("💡 NOTE: Using Parameter Store instead of Secrets Manager saves $1.20/month")
+    print("   Parameter Store is free for standard parameters with KMS encryption.")
     print()
 
 

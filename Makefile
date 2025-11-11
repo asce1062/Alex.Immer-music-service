@@ -413,10 +413,10 @@ cf-upload-key: ## Upload CloudFront private key to Secrets Manager (requires KEY
 	python scripts/utils/upload_cloudfront_key.py --key-pair-id $(KEY_PAIR_ID)
 	@echo "$(GREEN)✓ Private key uploaded$(NC)"
 
-cf-generate-secrets: ## Generate client secrets for music service API
-	@echo "$(BLUE)Generating client secrets...$(NC)"
+cf-generate-secrets: ## Generate client secrets for music service API (Parameter Store)
+	@echo "$(BLUE)Generating client secrets for Parameter Store...$(NC)"
 	python scripts/utils/generate_client_secrets.py
-	@echo "$(YELLOW)Copy and run the AWS CLI commands above to store secrets$(NC)"
+	@echo "$(YELLOW)Copy and run the AWS CLI commands above to store parameters$(NC)"
 
 cf-setup: ## Complete CloudFront signed cookies setup (interactive)
 	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
@@ -566,12 +566,13 @@ test-auth: ## Test authentication API endpoint
 			exit 1; \
 		fi; \
 		echo "API Endpoint: $$API_ENDPOINT"; \
-		echo "$(YELLOW)Fetching client secret...$(NC)"; \
-		CLIENT_SECRET=$$(aws secretsmanager get-secret-value \
-			--secret-id music-service/clients/alexmbugua-personal \
-			--query SecretString --output text 2>/dev/null | jq -r .client_secret 2>/dev/null || echo "NOT_FOUND"); \
+		echo "$(YELLOW)Fetching client secret from Parameter Store...$(NC)"; \
+		CLIENT_SECRET=$$(aws ssm get-parameter \
+			--name /music-service/clients/alexmbugua-personal \
+			--with-decryption \
+			--query Parameter.Value --output text 2>/dev/null | jq -r .client_secret 2>/dev/null || echo "NOT_FOUND"); \
 		if [ "$$CLIENT_SECRET" = "NOT_FOUND" ]; then \
-			echo "$(RED)Error: Client secret not found. Run 'make cf-generate-secrets' first$(NC)"; \
+			echo "$(RED)Error: Client parameter not found. Run 'make cf-generate-secrets' first$(NC)"; \
 			exit 1; \
 		fi; \
 		echo "$(BLUE)Testing POST /v1/session...$(NC)"; \
