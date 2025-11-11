@@ -4,7 +4,7 @@
  */
 
 import type { ClientCredentials, RequestHeaders } from '../types/index.js';
-import { getClientCredentials } from './secrets-manager.js';
+import { getClientCredentials } from './parameter-store.js';
 import { logger } from '../utils/logger.js';
 
 export interface ValidationResult {
@@ -43,7 +43,7 @@ export async function validateClient(headers: RequestHeaders): Promise<Validatio
     };
   }
 
-  // Fetch client credentials from Secrets Manager
+  // Fetch client credentials from Parameter Store
   const client = await getClientCredentials(clientId);
 
   if (!client) {

@@ -84,6 +84,7 @@ provider "aws" {
 # Data Sources
 # ============================================================================
 data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
 
 # ============================================================================
 # S3 Bucket for Music Storage

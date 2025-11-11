@@ -63,7 +63,7 @@ resource "aws_iam_role_policy_attachment" "lambda_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Secrets Manager access policy
+# Secrets Manager access policy (CloudFront signing key only)
 resource "aws_iam_role_policy" "lambda_secrets_access" {
   name = "secrets-manager-access"
   role = aws_iam_role.lambda_execution.id
@@ -79,19 +79,39 @@ resource "aws_iam_role_policy" "lambda_secrets_access" {
           "secretsmanager:DescribeSecret"
         ]
         Resource = aws_secretsmanager_secret.cloudfront_signing_key.arn
-      },
+      }
+    ]
+  })
+}
+
+# Parameter Store access policy for client credentials
+resource "aws_iam_role_policy" "lambda_parameter_store_access" {
+  name = "parameter-store-access"
+  role = aws_iam_role.lambda_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
       {
-        Sid    = "AllowReadClientSecrets"
+        Sid    = "AllowReadClientParameters"
         Effect = "Allow"
         Action = [
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:DescribeSecret"
+          "ssm:GetParameter",
+          "ssm:GetParameters"
         ]
         Resource = [
-          aws_secretsmanager_secret.client_alexmbugua_personal.arn,
-          aws_secretsmanager_secret.client_music_app_web.arn,
-          aws_secretsmanager_secret.client_music_app_mobile.arn
+          aws_ssm_parameter.client_alexmbugua_personal.arn,
+          aws_ssm_parameter.client_music_app_web.arn,
+          aws_ssm_parameter.client_music_app_mobile.arn
         ]
+      },
+      {
+        Sid    = "AllowDecryptParameterStoreKMS"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt"
+        ]
+        Resource = "arn:aws:kms:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:key/alias/aws/ssm"
       }
     ]
   })

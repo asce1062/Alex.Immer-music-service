@@ -29,7 +29,8 @@ output "aws_managed_policies" {
     "CloudFrontFullAccess",
     "AWSCertificateManagerFullAccess",
     "AmazonDynamoDBFullAccess",
-    "SecretsManagerReadWrite"
+    "SecretsManagerReadWrite",
+    "AmazonSSMFullAccess"
   ]
 }
 
@@ -45,9 +46,9 @@ output "security_summary" {
   description = "Summary of security approach"
   value = {
     status               = "✅ Hybrid approach: AWS managed + scoped IAM policy"
-    security_posture     = "6/10 (Good for personal projects)"
+    security_posture     = "Good for personal projects"
     cost                 = "$0/month"
-    aws_managed_policies = "S3, CloudFront, ACM, DynamoDB, SecretsManager (full access)"
+    aws_managed_policies = "S3, CloudFront, ACM, DynamoDB, SecretsManager, AmazonSSM"
     custom_iam_policy    = "Scoped to music-service-* resources only"
     approach             = "Easy operations + sensitive IAM protection"
   }
