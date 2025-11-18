@@ -116,15 +116,14 @@ export class SessionManager {
     }
 
     try {
-      const response = await this.fetchWithRetry(`${this.config.apiEndpoint}/auth/session`, {
+      const response = await this.fetchWithRetry(`${this.config.apiEndpoint}/session`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-client-id': id,
+          'x-client-secret': secret,
         },
-        body: JSON.stringify({
-          client_id: id,
-          client_secret: secret,
-        }),
+        credentials: 'include',
       });
 
       if (!response.ok) {

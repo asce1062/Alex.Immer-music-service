@@ -109,13 +109,14 @@ describe('SessionManager', () => {
       expect(sessionInfo).toEqual(mockSessionInfo);
       expect(manager.isSessionValid()).toBe(true);
       expect(fetch).toHaveBeenCalledWith(
-        'https://api.example.com/auth/session',
+        'https://api.example.com/session',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({
-            client_id: 'test-client',
-            client_secret: 'test-secret',
+          headers: expect.objectContaining({
+            'x-client-id': 'test-client',
+            'x-client-secret': 'test-secret',
           }),
+          credentials: 'include',
         })
       );
     });
@@ -174,12 +175,13 @@ describe('SessionManager', () => {
       await manager.authenticate('custom-id', 'custom-secret');
 
       expect(fetch).toHaveBeenCalledWith(
-        'https://api.example.com/auth/session',
+        'https://api.example.com/session',
         expect.objectContaining({
-          body: JSON.stringify({
-            client_id: 'custom-id',
-            client_secret: 'custom-secret',
+          headers: expect.objectContaining({
+            'x-client-id': 'custom-id',
+            'x-client-secret': 'custom-secret',
           }),
+          credentials: 'include',
         })
       );
     });
