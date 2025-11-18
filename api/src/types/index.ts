@@ -33,10 +33,23 @@ export interface SignedCookies {
   'CloudFront-Key-Pair-Id': string;
 }
 
-export interface SessionResponse {
-  success: boolean;
+export interface CdnInfo {
+  base_url: string;
+  albums_path: string;
+  covers_path: string;
+  metadata_path: string;
+  trackers_path: string;
+}
+
+export interface SessionInfo {
   expires_at: string;
-  client_id: string;
+  duration_seconds: number;
+}
+
+export interface SessionResponse {
+  status: 'success' | 'error';
+  session: SessionInfo;
+  cdn: CdnInfo;
 }
 
 export interface ErrorResponse {

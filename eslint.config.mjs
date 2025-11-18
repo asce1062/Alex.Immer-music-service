@@ -53,6 +53,10 @@ export default tseslint.config(
       '**/__pycache__/**',
       '*.config.js',
       '*.config.mjs',
+      '*.config.ts',
+      '**/*.config.ts',
+      '**/*.config.js',
+      '**/*.config.mjs',
       '**/*.d.ts', // TypeScript declaration files
       '**/*.d.ts.map',
       '**/*.js.map',
@@ -95,14 +99,33 @@ export default tseslint.config(
     ...tseslint.configs.disableTypeChecked,
   },
 
+  // Logger file - allow console statements
+  {
+    files: ['**/utils/logger.ts'],
+    rules: {
+      'no-console': 'off', // Logger implementation needs console
+    },
+  },
+
   // Test files - relaxed rules
   {
-    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/__tests__/**/*.ts',
+      '**/__tests__/**/*.tsx',
+    ],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-member-access': 'off',
       '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/require-await': 'off', // Mocks often use async without await
+      '@typescript-eslint/no-unused-vars': 'off', // Test utilities may be imported but unused
+      'no-duplicate-imports': 'off', // Tests may import types and values separately
     },
   }
 );
