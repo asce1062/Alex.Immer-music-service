@@ -154,8 +154,6 @@ jobs:
           cd packages/sdk
           echo "Publishing @asce1062/music-service-sdk@${{ steps.version.outputs.version }} to npm..."
           npm publish --tag ${{ steps.version.outputs.tag }} --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Commit version bump
         if: github.event_name != 'release' && inputs.dry_run != true
