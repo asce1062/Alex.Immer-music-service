@@ -158,6 +158,10 @@ jobs:
           echo "Publishing @asce1062/music-service-sdk@${{ steps.version.outputs.version }} to npm..."
           npm publish --tag ${{ steps.version.outputs.tag }} --access public
 
+          # Always update 'latest' tag to point to newest version
+          echo "Updating 'latest' tag to point to ${{ steps.version.outputs.version }}..."
+          npm dist-tag add @asce1062/music-service-sdk@${{ steps.version.outputs.version }} latest
+
       - name: Commit version bump
         if: github.event_name != 'release' && inputs.dry_run != true
         run: |
