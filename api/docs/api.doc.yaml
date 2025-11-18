@@ -1,0 +1,1136 @@
+---
+openapi: 3.0.3
+info:
+  title: Alex.Immer Music Streaming API
+  version: 3.0.0
+  description: |
+    Self-hosted music streaming API with CloudFront CDN-backed playback.
+
+    ## Architecture
+    - **Authentication**: Client credentials → CloudFront signed cookies (2hr sessions)
+    - **Static Content**: Direct CDN access for metadata JSON and media files
+    - **Dynamic Features**: API Gateway + Lambda for search, browse, recommendations
+
+    ## Authentication Flow
+    1. Client sends `x-client-id` and `x-client-secret` to `POST /v1/session`
+    2. Server validates credentials and returns CloudFront signed cookies
+    3. Client uses cookies to access CDN resources (metadata, tracks, images)
+    4. Session expires after 2 hours (customizable per client)
+
+    ## Cost Optimization
+    - Metadata JSON served directly from CDN (no Lambda invocations)
+    - Aggressive caching: metadata (1hr), tracks (24hr), images (7 days)
+    - Client-side search recommended for small catalog (120 tracks)
+
+    ## Resources
+    - Total catalog: 120 tracks, 6 albums, 215 tracker modules
+    - Total size: 855.24 MiB
+    - Formats: MP3 (audio), XM/IT/MOD/S3M/MPTM/FTM/NSF (tracker modules)
+
+  contact:
+    name: Alex Mbugua
+    url: https://alexmbugua.me
+  license:
+    name: Private - All Rights Reserved
+
+servers:
+  - url: https://music-api.aleximmer.me/v1
+    description: Production API (API Gateway + Lambda)
+  - url: https://cdn.alexmbugua.me
+    description: CDN (Direct metadata and media access)
+
+tags:
+  - name: Authentication
+    description: Client authentication and session management
+  - name: Static Metadata
+    description: Direct CDN access to metadata JSON files (requires signed cookies)
+
+paths:
+  /session:
+    post:
+      tags:
+        - Authentication
+      summary: Create authentication session
+      description: |
+        Authenticate client and receive CloudFront signed cookies for CDN access.
+
+        **Headers Required:**
+        - `x-client-id`: Client identifier (e.g., "alexmbugua-personal", "android-app")
+        - `x-client-secret`: Client secret (stored in AWS Parameter Store)
+        - `Origin`: Origin header for CORS validation (e.g., "https://alexmbugua.me")
+
+        **Response:**
+        - Sets 3 CloudFront signed cookies (Policy, Signature, Key-Pair-Id)
+        - Cookies valid for 2 hours (Max-Age=7200)
+        - Returns success status, expiration timestamp, and client ID
+        - CORS headers included for cross-origin requests
+
+        **CDN URLs (Client constructs):**
+        - Metadata: `https://cdn.alexmbugua.me/metadata/`
+        - Albums: `https://cdn.alexmbugua.me/albums/`
+        - Trackers: `https://cdn.alexmbugua.me/tracker/`
+
+      operationId: createSession
+      security:
+        - ClientCredentials: []
+      responses:
+        "200":
+          description: Session created successfully
+          headers:
+            Set-Cookie:
+              description: CloudFront signed cookies (3 cookies set)
+              schema:
+                type: string
+              examples:
+                policy:
+                  value: >-
+                    CloudFront-Policy=xxx; Domain=.alexmbugua.me;
+                    Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=7200
+                signature:
+                  value: >-
+                    CloudFront-Signature=xxx; Domain=.alexmbugua.me;
+                    Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=7200
+                keypairid:
+                  value: >-
+                    CloudFront-Key-Pair-Id=xxx; Domain=.alexmbugua.me;
+                    Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=7200
+            Access-Control-Allow-Origin:
+              description: CORS origin header (matches request Origin)
+              schema:
+                type: string
+              example: "https://alexmbugua.me"
+            Access-Control-Allow-Credentials:
+              description: CORS credentials header
+              schema:
+                type: string
+              example: "true"
+            Vary:
+              description: Vary header for CORS
+              schema:
+                type: string
+              example: "origin"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+              examples:
+                success:
+                  summary: Successful authentication
+                  value:
+                    status: "success"
+                    session:
+                      expires_at: "2025-11-11T18:00:00Z"
+                      duration_seconds: 7200
+                    cdn:
+                      base_url: "https://cdn.alexmbugua.me"
+                      albums_path: "/albums"
+                      covers_path: "/covers"
+                      metadata_path: "/metadata"
+                      trackers_path: "/tracker"
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                invalid_credentials:
+                  summary: Invalid client credentials
+                  value:
+                    status: error
+                    error:
+                      code: "INVALID_CREDENTIALS"
+                      message: "Invalid x-client-id or x-client-secret"
+                missing_headers:
+                  summary: Missing authentication headers
+                  value:
+                    status: error
+                    error:
+                      code: "MISSING_CREDENTIALS"
+                      message: "x-client-id and x-client-secret headers are required"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                status: error
+                error:
+                  code: "RATE_LIMIT_EXCEEDED"
+                  message: "Too many authentication attempts. Try again in 60 seconds."
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /metadata/manifest.json:
+    get:
+      tags:
+        - Static Metadata
+      summary: Get catalog manifest
+      description: |
+        **Direct CDN Access** - Construct URL and fetch with signed cookies.
+
+        Returns catalog index with schema version, totals, cache configuration, and integrity checksums.
+
+        **URL:** `https://cdn.alexmbugua.me/metadata/manifest.json`
+
+        **Cache:** 1 hour TTL, revalidate with ETag
+
+        **Size:** ~5.9 KB
+      operationId: getManifest
+      security:
+        - CookieAuth: []
+      servers:
+        - url: https://cdn.alexmbugua.me
+      responses:
+        "200":
+          description: Manifest data
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+              example: "max-age=3600, public"
+            ETag:
+              schema:
+                type: string
+              example: '"abc123def456"'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Manifest"
+        "304":
+          description: Not modified (ETag match)
+        "403":
+          description: Forbidden (invalid or expired signed cookies)
+
+  /metadata/albums.json:
+    get:
+      tags:
+        - Static Metadata
+      summary: Get albums catalog
+      description: |
+        **Direct CDN Access** - Construct URL and fetch with signed cookies.
+
+        Returns complete album catalog with tracks, cover art, and metadata.
+
+        **URL:** `https://cdn.alexmbugua.me/metadata/albums.json`
+
+        **Cache:** 1 hour TTL
+
+        **Size:** ~18 KB
+      operationId: getAlbums
+      security:
+        - CookieAuth: []
+      servers:
+        - url: https://cdn.alexmbugua.me
+      responses:
+        "200":
+          description: Albums data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Album"
+
+  /metadata/tracks.json:
+    get:
+      tags:
+        - Static Metadata
+      summary: Get tracks catalog
+      description: |
+        **Direct CDN Access** - Construct URL and fetch with signed cookies.
+
+        Returns complete track catalog (120 tracks) with full playback metadata.
+
+        **URL:** `https://cdn.alexmbugua.me/metadata/tracks.json`
+
+        **Cache:** 1 hour TTL
+
+        **Size:** ~325 KB
+
+        **Recommendation:** Fetch once per session and cache client-side (IndexedDB)
+      operationId: getTracks
+      security:
+        - CookieAuth: []
+      servers:
+        - url: https://cdn.alexmbugua.me
+      responses:
+        "200":
+          description: Tracks data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Track"
+
+  /metadata/tracker.json:
+    get:
+      tags:
+        - Static Metadata
+      summary: Get tracker modules catalog
+      description: |
+        **Direct CDN Access** - Construct URL and fetch with signed cookies.
+
+        Returns catalog of tracker modules (XM, IT, MOD, S3M, MPTM, FTM, NSF) with format metadata.
+
+        **URL:** `https://cdn.alexmbugua.me/metadata/tracker.json`
+
+        **Cache:** 1 hour TTL
+
+        **Size:** ~334 KB
+      operationId: getTrackers
+      security:
+        - CookieAuth: []
+      servers:
+        - url: https://cdn.alexmbugua.me
+      responses:
+        "200":
+          description: Tracker modules data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrackerModule"
+
+  /metadata/unreleased.json:
+    get:
+      tags:
+        - Static Metadata
+      summary: Get unreleased tracker modules
+      description: |
+        **Direct CDN Access** - Construct URL and fetch with signed cookies.
+
+        Returns tracker modules without released MP3 masters.
+
+        **URL:** `https://cdn.alexmbugua.me/metadata/unreleased.json`
+
+        **Cache:** 1 hour TTL
+
+        **Size:** ~76 KB
+      operationId: getUnreleased
+      security:
+        - CookieAuth: []
+      servers:
+        - url: https://cdn.alexmbugua.me
+      responses:
+        "200":
+          description: Unreleased tracker modules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrackerModule"
+
+components:
+  securitySchemes:
+    ClientCredentials:
+      type: apiKey
+      in: header
+      name: x-client-id
+      description: |
+        Client authentication using two headers:
+        - `x-client-id`: Client identifier
+        - `x-client-secret`: Client secret (validated against AWS Parameter Store)
+    CookieAuth:
+      type: apiKey
+      in: cookie
+      name: CloudFront-Policy
+      description: |
+        CloudFront signed cookies (3 cookies required):
+        - `CloudFront-Policy`: Access policy
+        - `CloudFront-Signature`: Signature
+        - `CloudFront-Key-Pair-Id`: Key pair ID
+
+  schemas:
+    SessionResponse:
+      type: object
+      required:
+        - status
+        - session
+        - cdn
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+          description: Response status
+          example: "success"
+        session:
+          type: object
+          required:
+            - expires_at
+            - duration_seconds
+          properties:
+            expires_at:
+              type: string
+              format: date-time
+              description: ISO 8601 timestamp when session expires (UTC)
+              example: "2025-11-11T18:00:00Z"
+            duration_seconds:
+              type: integer
+              description: Session duration in seconds
+              example: 7200
+          description: Session expiration information
+        cdn:
+          type: object
+          required:
+            - base_url
+            - albums_path
+            - covers_path
+            - metadata_path
+            - trackers_path
+          properties:
+            base_url:
+              type: string
+              format: uri
+              description: CDN base URL for content delivery
+              example: "https://cdn.alexmbugua.me"
+            albums_path:
+              type: string
+              description: Path prefix for album audio files
+              example: "/albums"
+            covers_path:
+              type: string
+              description: Path prefix for album cover images
+              example: "/covers"
+            metadata_path:
+              type: string
+              description: Path prefix for metadata files (manifest, album metadata)
+              example: "/metadata"
+            trackers_path:
+              type: string
+              description: Path prefix for tracker module files
+              example: "/tracker"
+          description: CDN content paths for client resource fetching
+
+    Manifest:
+      type: object
+      required:
+        - schema_version
+        - content_type
+        - generated_at
+        - catalog
+        - integrity
+      properties:
+        schema_version:
+          type: string
+          description: Metadata schema version
+          example: "3.0.0"
+        content_type:
+          type: string
+          description: Content type identifier
+          example: "metadata"
+        generated_at:
+          type: string
+          format: date-time
+          description: Metadata generation timestamp
+          example: "2025-11-10T15:21:21Z"
+        cache_info:
+          type: object
+          properties:
+            strategy:
+              type: string
+              example: "stale-while-revalidate"
+            ttl_seconds:
+              type: integer
+              example: 300
+            local_cache_path:
+              type: string
+              example: "Music/.metadata_cache.json"
+            remote_fallback:
+              type: boolean
+              example: true
+        catalog:
+          type: object
+          required:
+            - total_tracks
+            - total_size_bytes
+            - total_duration_seconds
+          properties:
+            released_albums:
+              type: integer
+              example: 6
+            unreleased_collections:
+              type: integer
+              example: 1
+            total_tracks:
+              type: integer
+              example: 120
+            total_tracker_sources:
+              type: integer
+              example: 215
+            total_unlinked_tracker_files:
+              type: integer
+              example: 95
+            total_size_bytes:
+              type: integer
+              format: int64
+              example: 896796175
+            total_duration_seconds:
+              type: integer
+              example: 21851
+        albums:
+          type: array
+          description: Album summaries for quick navigation
+          items:
+            $ref: "#/components/schemas/AlbumSummary"
+        api:
+          type: object
+          description: API endpoint information
+          properties:
+            rest_entrypoint:
+              type: string
+              format: uri
+              example: "https://music-api.aleximmer.me/v1/music/"
+            graphql_entrypoint:
+              type: string
+              format: uri
+              example: "https://music-api.aleximmer.me/graphql"
+            examples:
+              type: object
+              additionalProperties:
+                type: string
+        artist:
+          type: object
+          description: Artist information
+          properties:
+            name:
+              type: string
+              example: "Alex.Immer"
+            url:
+              type: string
+              format: uri
+              example: "https://music.alexmbugua.me"
+            contact:
+              type: string
+              format: email
+              example: "tnkratos@gmail.com"
+            socials:
+              type: object
+              additionalProperties:
+                type: string
+                format: uri
+        cdn:
+          type: object
+          description: CDN base URLs
+          properties:
+            base_url:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/"
+            albums_root:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/albums/"
+            trackers_root:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/tracker/"
+        covers:
+          type: object
+          description: Cover art URLs
+          properties:
+            base_url:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/covers/"
+            thumbs_url:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/covers/thumbs/"
+            default_cover:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/covers/default-cover.png"
+        service_worker:
+          type: object
+          description: Service worker cache configuration
+          properties:
+            cache_strategy:
+              type: string
+              example: "stale-while-revalidate"
+            cached_endpoints:
+              type: array
+              items:
+                type: string
+              example: ["albums.json", "tracks.json", "tracker.json", "unreleased.json"]
+        tracker_files:
+          type: object
+          description: Tracker file index URLs
+          properties:
+            released:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/metadata/tracker.json"
+            unreleased:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/metadata/unreleased.json"
+        resources:
+          type: object
+          description: Metadata resource index URLs
+          properties:
+            albums_index:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/metadata/albums.json"
+            tracks_index:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/metadata/tracks.json"
+            tracker_index:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/metadata/tracker.json"
+            unreleased_index:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/metadata/unreleased.json"
+        integrity:
+          type: object
+          properties:
+            checksums:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  value:
+                    type: string
+                    description: SHA256 checksum
+                  size_bytes:
+                    type: integer
+                  last_modified:
+                    type: string
+                    format: date-time
+
+    Album:
+      type: object
+      required:
+        - album_id
+        - album
+        - artist
+        - tracks
+      properties:
+        album_id:
+          type: string
+          description: Unique album identifier
+          example: "escape-artist"
+        album:
+          type: string
+          description: Album title
+          example: "Escape Artist"
+        artist:
+          type: string
+          example: "Alex.Immer"
+        year:
+          type: integer
+          description: Release year
+          example: 2016
+        total_tracks:
+          type: integer
+          description: Number of tracks in album
+          example: 39
+        released:
+          type: boolean
+          description: Whether album is released
+          example: true
+        duration:
+          type: string
+          description: Human-readable duration
+          example: "2h 24m"
+        duration_seconds:
+          type: integer
+          description: Total album duration in seconds
+          example: 8687
+        file_size_bytes:
+          type: integer
+          format: int64
+          description: Total album size in bytes
+          example: 350464646
+        file_size_human:
+          type: string
+          description: Human-readable file size
+          example: "334.23 MiB"
+        bpm_range:
+          type: object
+          properties:
+            min:
+              type: number
+              format: float
+              example: 33.3
+            max:
+              type: number
+              format: float
+              example: 390.2
+            avg:
+              type: number
+              format: float
+              example: 174.5
+        genre:
+          type: string
+          example: "Chip Tunes"
+        description:
+          type: string
+          example: "Retro-inspired electronic collection blending Commodore-era synths with modern groove."
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["retro", "chiptune", "synthwave"]
+        cdn_cover_url:
+          type: string
+          format: uri
+          example: "https://cdn.alexmbugua.me/covers/8Bit-Seduction.png"
+        s3_cover_url:
+          type: string
+          format: uri
+          example: "https://alexmbugua-music.s3.amazonaws.com/covers/8Bit-Seduction.png"
+        cdn_thumbnail_url:
+          type: string
+          format: uri
+          example: "https://cdn.alexmbugua.me/covers/thumbs/8bit-seduction.png"
+        s3_thumbnail_url:
+          type: string
+          format: uri
+          example: "https://alexmbugua-music.s3.amazonaws.com/covers/thumbs/8bit-seduction.png"
+        explicit:
+          type: boolean
+          description: Explicit content flag
+          example: false
+        checksum:
+          allOf:
+            - $ref: "#/components/schemas/Checksum"
+            - type: object
+              properties:
+                covers:
+                  type: array
+                  items:
+                    type: string
+                  description: Cover image filenames included in checksum
+                  example: ["8Bit-Seduction.png"]
+        last_modified:
+          type: string
+          format: date-time
+          description: Last modified timestamp
+          example: "2025-08-19T21:38:57Z"
+        tracks:
+          type: array
+          description: Array of track CDN URLs
+          items:
+            type: string
+            format: uri
+          example: ["https://cdn.alexmbugua.me/albums/8Bit-Seduction/01.The-Day-They-Landed.mp3"]
+        cover:
+          type: string
+          format: uri
+          description: Full cover URL (legacy field)
+          example: "https://cdn.alexmbugua.me/covers/8Bit-Seduction.png"
+        thumbnail:
+          type: string
+          format: uri
+          description: Thumbnail URL (legacy field)
+          example: "https://cdn.alexmbugua.me/covers/thumbs/8Bit-Seduction.png"
+
+    Track:
+      type: object
+      required:
+        - track_id
+        - title
+        - artist
+        - album
+        - duration_seconds
+        - cdn_url
+      properties:
+        track_id:
+          type: string
+          description: Unique track identifier
+          example: "escape-artist-01-intro"
+        title:
+          type: string
+          example: "Intro"
+        artist:
+          type: string
+          example: "Alex.Immer"
+        album:
+          type: string
+          example: "Escape-Artist"
+        album_id:
+          type: string
+          example: "escape-artist"
+        track_number:
+          type: integer
+          example: 1
+        duration_seconds:
+          type: integer
+          description: Track duration in seconds
+          example: 234
+        duration_human:
+          type: string
+          example: "3 min 54s"
+        bit_rate_kbps:
+          type: integer
+          description: Audio bit rate in kbps
+          example: 320
+        file_size_bytes:
+          type: integer
+          format: int64
+          example: 9437184
+        file_size:
+          type: string
+          example: "9.00 MiB"
+        format:
+          type: string
+          example: "mp3"
+        sample_rate:
+          type: string
+          example: "44100 Hz"
+        channels:
+          type: string
+          example: "Stereo"
+        genre:
+          type: string
+          example: "Electronic"
+        year:
+          type: string
+          example: "2016"
+        bpm:
+          type: integer
+          example: 140
+        explicit:
+          type: boolean
+          description: Explicit content flag
+          example: false
+        checksum:
+          $ref: "#/components/schemas/Checksum"
+        content_length:
+          type: integer
+          format: int64
+          description: File size for HTTP range requests
+          example: 9437184
+        last_modified:
+          type: string
+          format: date-time
+          description: Last modified timestamp (ISO 8601)
+          example: "2016-05-24T20:08:37Z"
+        accept_ranges:
+          type: string
+          description: HTTP range support
+          example: "bytes"
+        etag:
+          type: string
+          description: Entity tag for cache validation
+          example: '"0f4fcf52a5414dcb085c6c0d2fd3d2b8"'
+        cdn_url:
+          type: string
+          format: uri
+          description: CDN streaming URL (requires signed cookies)
+          example: "https://cdn.alexmbugua.me/albums/Escape-Artist/01.Intro.mp3"
+        s3_url:
+          type: string
+          format: uri
+          description: Direct S3 URL (for debugging, not playback)
+          example: "https://alexmbugua-music.s3.amazonaws.com/albums/Escape-Artist/01.Intro.mp3"
+        cover_art:
+          $ref: "#/components/schemas/CoverArt"
+        linked_tracker:
+          type: array
+          description: Array of linked tracker modules (if available)
+          items:
+            type: object
+            properties:
+              tracker_id:
+                type: string
+                example: "8bit-seduction-01-the-day-they-landed"
+              tracker_title:
+                type: string
+                example: "The Day They Landed"
+              format:
+                type: string
+                description: Tracker format (xm, it, mod, s3m, etc.)
+                example: "xm"
+              file_size_bytes:
+                type: integer
+                example: 1966
+              checksum:
+                type: string
+                description: SHA256 checksum (hex string)
+                example: "41be70a562043cb28cf01437160d5bfc75827884cb418f0a22f51f882ee86229"
+              albums_cdn_url:
+                type: string
+                format: uri
+                example: "https://cdn.alexmbugua.me/albums/8Bit-Seduction/tracker/01.The-Day-They-Landed.xm"
+              albums_s3_url:
+                type: string
+                format: uri
+                example: >-
+                  https://alexmbugua-music.s3.amazonaws.com/albums/
+                  8Bit-Seduction/tracker/01.The-Day-They-Landed.xm
+              tracker_cdn_url:
+                type: string
+                format: uri
+                example: "https://cdn.alexmbugua.me/tracker/albums/8Bit-Seduction/01.The-Day-They-Landed.xm"
+              tracker_s3_url:
+                type: string
+                format: uri
+                example: >-
+                  https://alexmbugua-music.s3.amazonaws.com/tracker/
+                  albums/8Bit-Seduction/01.The-Day-They-Landed.xm
+
+    TrackSummary:
+      type: object
+      description: Abbreviated track metadata for album listings
+      required:
+        - track_id
+        - title
+        - track_number
+        - duration_seconds
+        - cdn_url
+      properties:
+        track_id:
+          type: string
+          example: "escape-artist-01-intro"
+        title:
+          type: string
+          example: "Intro"
+        track_number:
+          type: integer
+          example: 1
+        duration_seconds:
+          type: integer
+          example: 234
+        cdn_url:
+          type: string
+          format: uri
+          example: "https://cdn.alexmbugua.me/albums/Escape-Artist/01.Intro.mp3"
+        s3_url:
+          type: string
+          format: uri
+          example: "https://alexmbugua-music.s3.amazonaws.com/albums/Escape-Artist/01.Intro.mp3"
+
+    TrackerModule:
+      type: object
+      required:
+        - tracker_id
+        - title
+        - file_name
+        - format
+        - cdn_url
+      properties:
+        tracker_id:
+          type: string
+          example: "escape-artist-03-love-on-speed"
+        title:
+          type: string
+          example: "Love On Speed"
+        file_name:
+          type: string
+          example: "03.Love-On-Speed.xm"
+        file_size_bytes:
+          type: integer
+          example: 128288
+        file_size:
+          type: string
+          example: "0.12 MiB"
+        format:
+          type: string
+          description: Tracker format (xm, it, mod, s3m, mptm, ftm, nsf)
+          example: "xm"
+        format_long:
+          type: string
+          example: "Extended Module"
+        created:
+          type: string
+          format: date-time
+          example: "2016-05-24T23:08:37Z"
+        composer:
+          type: string
+          example: "Alex.Immer"
+        source_format_version:
+          type: string
+          description: Detected tracker format version
+          example: "5.125"
+        tracker_tools:
+          type: array
+          items:
+            type: string
+          description: Tracker software used
+          example: ["ScreamTracker 3"]
+        channels:
+          type: integer
+          example: 16
+        patterns:
+          type: integer
+          example: 11
+        instruments:
+          type: integer
+          example: 15
+        samples:
+          type: integer
+          example: 15
+        song_name:
+          type: string
+          description: Original module song name
+          example: "Love. (On Speed)"
+        checksum:
+          $ref: "#/components/schemas/Checksum"
+        content_length:
+          type: integer
+          example: 128288
+        last_modified:
+          type: string
+          format: date-time
+          example: "2016-05-24T20:08:37Z"
+        accept_ranges:
+          type: string
+          example: "bytes"
+        etag:
+          type: string
+          example: '"0f4fcf52a5414dcb085c6c0d2fd3d2b8"'
+        explicit:
+          type: boolean
+          example: false
+        linked:
+          type: boolean
+          description: Whether linked to MP3 master
+          example: true
+        album:
+          type: string
+          example: "Escape-Artist"
+        albums_cdn_url:
+          type: string
+          format: uri
+          example: "https://cdn.alexmbugua.me/albums/Escape-Artist/Extras/tracker/03.Love-On-Speed.xm"
+        tracker_cdn_url:
+          type: string
+          format: uri
+          example: "https://cdn.alexmbugua.me/tracker/albums/Escape-Artist/Extras/03.Love-On-Speed.xm"
+        linked_master:
+          type: object
+          description: Linked MP3 track (if linked=true)
+          properties:
+            track_id:
+              type: string
+              example: "escape-artist-extras-03-love"
+            track_title:
+              type: string
+              example: "Love. (On Speed)"
+            format:
+              type: string
+              example: "mp3"
+            cdn_url:
+              type: string
+              format: uri
+              example: "https://cdn.alexmbugua.me/albums/Escape-Artist/Extras/03.Love-On-Speed.mp3"
+
+    Checksum:
+      type: object
+      required:
+        - algorithm
+        - value
+      properties:
+        algorithm:
+          type: string
+          example: "sha256"
+        value:
+          type: string
+          description: SHA256 hash (hex)
+          example: "c09da244ce02020c270bc7ba3e99ba087d76b3743f96bdac958a789aac5dd81f"
+        verified_at:
+          type: string
+          format: date-time
+          example: "2025-11-10T15:21:21Z"
+
+    CoverArt:
+      type: object
+      properties:
+        full:
+          type: string
+          format: uri
+          description: Full-resolution cover image (JPEG)
+          example: "https://cdn.alexmbugua.me/albums/Escape-Artist/cover.jpg"
+        thumbnail:
+          type: string
+          format: uri
+          description: Thumbnail cover image (PNG, 300x300)
+          example: "https://cdn.alexmbugua.me/albums/Escape-Artist/cover-thumb.png"
+
+    AlbumSummary:
+      type: object
+      description: Abbreviated album metadata for manifest listings
+      required:
+        - id
+        - title
+        - released
+        - year
+      properties:
+        id:
+          type: string
+          description: Album identifier
+          example: "8bit-seduction"
+        title:
+          type: string
+          description: Album title
+          example: "8Bit Seduction"
+        released:
+          type: boolean
+          description: Whether album is released
+          example: true
+        year:
+          type: integer
+          description: Release year
+          example: 2017
+        cover:
+          type: string
+          format: uri
+          description: Full cover URL
+          example: "https://cdn.alexmbugua.me/covers/8Bit-Seduction.png"
+        thumbnail:
+          type: string
+          format: uri
+          description: Thumbnail URL
+          example: "https://cdn.alexmbugua.me/covers/thumbs/8Bit-Seduction.png"
+        url:
+          type: string
+          format: uri
+          description: Album directory URL
+          example: "https://cdn.alexmbugua.me/albums/8Bit-Seduction/"
+        metadata:
+          type: string
+          format: uri
+          description: Album tracks metadata URL
+          example: "https://cdn.alexmbugua.me/metadata/tracks.json?album=8bit-seduction"
+
+    ErrorResponse:
+      type: object
+      required:
+        - status
+        - error
+      properties:
+        status:
+          type: string
+          enum: [error]
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+              example: "INVALID_CREDENTIALS"
+            message:
+              type: string
+              description: Human-readable error message
+              example: "Invalid x-client-id or x-client-secret"
+            details:
+              type: object
+              description: Additional error context
+              additionalProperties: true

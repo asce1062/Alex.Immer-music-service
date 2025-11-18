@@ -332,6 +332,12 @@ build-web: ## Build Web workspace
 	npm run build:web
 	@echo "$(GREEN)✓ Web built$(NC)"
 
+build-sdk: ## Build SDK workspace
+	@echo "$(BLUE)Building SDK...$(NC)"
+	cd packages/sdk && npm run build
+	@echo "$(GREEN)✓ SDK built: packages/sdk/dist/$(NC)"
+	@echo "$(CYAN)Artifacts: ESM, CJS, IIFE, DTS$(NC)"
+
 build-lambda: ## Build Lambda function and package for deployment
 	@echo "$(BLUE)Building Lambda function...$(NC)"
 	cd api && npm install && npm run build
@@ -343,6 +349,160 @@ deploy-lambda: build-lambda ## Build and deploy Lambda function to AWS
 	cp api/dist/auth-session.zip infrastructure/terraform/remote-state/02-infrastructure/lambda/
 	cd infrastructure/terraform/remote-state/02-infrastructure && terraform apply -target=aws_lambda_function.auth_session
 	@echo "$(GREEN)✓ Lambda deployed$(NC)"
+
+publish-sdk-dry-run: build-sdk ## Test SDK publishing locally (dry-run, no actual publish)
+	@echo "$(BLUE)Running SDK publish dry-run...$(NC)"
+	@echo "$(YELLOW)Note: For prerelease versions (e.g., 1.0.0-beta.1), use --tag beta$(NC)"
+	@cd packages/sdk && npm publish --dry-run --tag beta
+	@echo "$(GREEN)✓ Dry-run complete - no changes made$(NC)"
+	@echo "$(CYAN)Review the output above to see what would be published$(NC)"
+
+publish-sdk-beta: build-sdk ## Publish SDK as beta (1.0.0-beta.X) via GitHub workflow
+	@echo "$(BLUE)Publishing SDK as beta version...$(NC)"
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)Error: GitHub CLI (gh) not installed$(NC)"; \
+		echo "Install: brew install gh"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)This will trigger the GitHub workflow with:$(NC)"
+	@echo "  - Version bump: prerelease"
+	@echo "  - Dist tag: beta"
+	@echo ""
+	@read -p "Continue? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		gh workflow run publish-sdk.yml \
+			--ref $$(git branch --show-current) \
+			-f version=prerelease \
+			-f tag=beta \
+			-f dry_run=false; \
+		echo "$(GREEN)✓ Workflow triggered$(NC)"; \
+		echo "$(CYAN)View status: https://github.com/asce1062/Alex.Immer-music-service/actions$(NC)"; \
+	else \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+	fi
+
+publish-sdk-next: build-sdk ## Publish SDK as release candidate (1.0.0-rc.X) via GitHub workflow
+	@echo "$(BLUE)Publishing SDK as release candidate...$(NC)"
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)Error: GitHub CLI (gh) not installed$(NC)"; \
+		echo "Install: brew install gh"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)This will trigger the GitHub workflow with:$(NC)"
+	@echo "  - Version bump: prerelease"
+	@echo "  - Dist tag: next"
+	@echo ""
+	@read -p "Continue? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		gh workflow run publish-sdk.yml \
+			--ref $$(git branch --show-current) \
+			-f version=prerelease \
+			-f tag=next \
+			-f dry_run=false; \
+		echo "$(GREEN)✓ Workflow triggered$(NC)"; \
+		echo "$(CYAN)View status: https://github.com/asce1062/Alex.Immer-music-service/actions$(NC)"; \
+	else \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+	fi
+
+publish-sdk-alpha: build-sdk ## Publish SDK as alpha (1.0.0-alpha.X) via GitHub workflow
+	@echo "$(BLUE)Publishing SDK as alpha version...$(NC)"
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)Error: GitHub CLI (gh) not installed$(NC)"; \
+		echo "Install: brew install gh"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)This will trigger the GitHub workflow with:$(NC)"
+	@echo "  - Version bump: prerelease"
+	@echo "  - Dist tag: alpha"
+	@echo ""
+	@read -p "Continue? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		gh workflow run publish-sdk.yml \
+			--ref $$(git branch --show-current) \
+			-f version=prerelease \
+			-f tag=alpha \
+			-f dry_run=false; \
+		echo "$(GREEN)✓ Workflow triggered$(NC)"; \
+		echo "$(CYAN)View status: https://github.com/asce1062/Alex.Immer-music-service/actions$(NC)"; \
+	else \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+	fi
+
+publish-sdk-latest: build-sdk ## Publish SDK as stable release (1.X.0) via GitHub workflow
+	@echo "$(BLUE)Publishing SDK as stable release...$(NC)"
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)Error: GitHub CLI (gh) not installed$(NC)"; \
+		echo "Install: brew install gh"; \
+		exit 1; \
+	fi
+	@echo "$(YELLOW)This will trigger the GitHub workflow with:$(NC)"
+	@echo "  - Version bump: minor (or choose patch/major)"
+	@echo "  - Dist tag: latest"
+	@echo ""
+	@echo "$(CYAN)Choose version bump type:$(NC)"
+	@echo "  1) patch (1.0.0 → 1.0.1)"
+	@echo "  2) minor (1.0.0 → 1.1.0)"
+	@echo "  3) major (1.0.0 → 2.0.0)"
+	@read -p "Select [1-3]: " choice; \
+	case $$choice in \
+		1) VERSION_TYPE="patch" ;; \
+		2) VERSION_TYPE="minor" ;; \
+		3) VERSION_TYPE="major" ;; \
+		*) echo "$(RED)Invalid choice$(NC)"; exit 1 ;; \
+	esac; \
+	echo ""; \
+	read -p "Publish $$VERSION_TYPE version as @latest? (y/N): " confirm; \
+	if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+		gh workflow run publish-sdk.yml \
+			--ref $$(git branch --show-current) \
+			-f version=$$VERSION_TYPE \
+			-f tag=latest \
+			-f dry_run=false; \
+		echo "$(GREEN)✓ Workflow triggered$(NC)"; \
+		echo "$(CYAN)View status: https://github.com/asce1062/Alex.Immer-music-service/actions$(NC)"; \
+	else \
+		echo "$(YELLOW)Cancelled$(NC)"; \
+	fi
+
+publish-sdk: ## Trigger SDK publishing workflow (recommended method)
+	@echo "$(CYAN)╔═══════════════════════════════════════════════════════════╗$(NC)"
+	@echo "$(CYAN)║  $(BLUE)SDK Publishing Workflow$(CYAN)                               ║$(NC)"
+	@echo "$(CYAN)╚═══════════════════════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Recommended: Use GitHub Actions workflow for publishing$(NC)"
+	@echo "This ensures npm provenance and runs all quality checks"
+	@echo ""
+	@echo "$(BLUE)Option 1: Manual Workflow (GitHub UI)$(NC)"
+	@echo "  1. Go to: https://github.com/asce1062/Alex.Immer-music-service/actions/workflows/publish-sdk.yml"
+	@echo "  2. Click 'Run workflow'"
+	@echo "  3. Select version bump type and tag"
+	@echo "  4. Enable 'dry run' for testing"
+	@echo ""
+	@echo "$(BLUE)Option 2: GitHub CLI$(NC)"
+	@if command -v gh >/dev/null 2>&1; then \
+		echo "  Run: gh workflow run publish-sdk.yml"; \
+		echo ""; \
+		read -p "Trigger workflow now? (y/N): " confirm; \
+		if [ "$$confirm" = "y" ] || [ "$$confirm" = "Y" ]; then \
+			gh workflow run publish-sdk.yml --ref $$(git branch --show-current); \
+			echo "$(GREEN)✓ Workflow triggered$(NC)"; \
+			echo "View status: https://github.com/asce1062/Alex.Immer-music-service/actions"; \
+		else \
+			echo "$(YELLOW)Cancelled$(NC)"; \
+		fi \
+	else \
+		echo "  $(YELLOW)Install gh CLI: brew install gh$(NC)"; \
+	fi
+	@echo ""
+	@echo "$(BLUE)Option 3: Create GitHub Release$(NC)"
+	@echo "  1. Create release with tag: sdk-vX.Y.Z"
+	@echo "  2. Workflow runs automatically"
+	@echo ""
+	@echo "$(RED)⚠ Direct npm publish (not recommended):$(NC)"
+	@echo "  cd packages/sdk && npm publish --tag beta --access public"
+	@echo "  $(YELLOW)This skips provenance and quality checks!$(NC)"
+	@echo "  $(YELLOW)For prereleases, --tag is REQUIRED (beta/next/alpha)$(NC)"
 
 # ============================================================================
 # Development Workflow

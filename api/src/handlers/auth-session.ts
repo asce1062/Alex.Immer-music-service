@@ -90,9 +90,18 @@ export const handler: Handler<APIGatewayProxyEventV2, APIGatewayProxyResultV2> =
     // Create response
     const expiresAt = new Date(Date.now() + expiresInSeconds * 1000).toISOString();
     const responseData: SessionResponse = {
-      success: true,
-      expires_at: expiresAt,
-      client_id: client.client_id,
+      status: 'success',
+      session: {
+        expires_at: expiresAt,
+        duration_seconds: expiresInSeconds,
+      },
+      cdn: {
+        base_url: `https://${cdnDomain}`,
+        albums_path: '/albums',
+        covers_path: '/covers',
+        metadata_path: '/metadata',
+        trackers_path: '/tracker',
+      },
     };
 
     logSessionCreated(client.client_id, expiresAt, client.cookie_duration_hours, headers.origin);

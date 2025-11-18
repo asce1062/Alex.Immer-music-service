@@ -7,17 +7,20 @@
   "license": "MIT",
   "workspaces": [
     "api",
-    "web"
+    "web",
+    "packages/sdk"
   ],
   "scripts": {
     "=========== DEVELOPMENT ===========": "",
     "dev": "turbo run dev",
     "dev:api": "npm run dev --workspace=api",
     "dev:web": "npm run dev --workspace=web",
+    "dev:sdk": "npm run dev --workspace=packages/sdk",
     "=========== BUILD ===========": "",
     "build": "turbo run build",
     "build:api": "npm run build --workspace=api",
     "build:web": "npm run build --workspace=web",
+    "build:sdk": "npm run build --workspace=packages/sdk",
     "=========== FORMATTING ===========": "",
     "format": "npm run format:ts && npm run format:py",
     "format:ts": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml,toml,astro,yamllint,jsonc,.}\" --ignore-path .gitignore",
