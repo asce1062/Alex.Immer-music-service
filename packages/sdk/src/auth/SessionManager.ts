@@ -136,7 +136,28 @@ export class SessionManager {
       }
 
       const data: unknown = await response.json();
-      const sessionInfo = validate(SessionInfoSchema, data, 'SessionInfo');
+
+      // Transform API response to SessionInfo structure
+      // API returns: { status, session: { expires_at, duration_seconds }, cdn: { ... } }
+      // SDK expects: { expires_at, duration_seconds, cdn: { ... } }
+      const apiResponse = data as {
+        status?: string;
+        session?: {
+          expires_at?: string;
+          duration_seconds?: number;
+          created_at?: string;
+        };
+        cdn?: unknown;
+      };
+
+      const transformedData = {
+        expires_at: apiResponse.session?.expires_at,
+        duration_seconds: apiResponse.session?.duration_seconds,
+        created_at: apiResponse.session?.created_at,
+        cdn: apiResponse.cdn,
+      };
+
+      const sessionInfo = validate(SessionInfoSchema, transformedData, 'SessionInfo');
 
       // Store session
       this.sessionInfo = sessionInfo;

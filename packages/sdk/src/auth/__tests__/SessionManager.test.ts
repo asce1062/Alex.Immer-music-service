@@ -24,6 +24,17 @@ describe('SessionManager', () => {
     },
   };
 
+  // Mock API response (as returned by the API)
+  const mockApiResponse = {
+    status: 'success',
+    session: {
+      expires_at: mockSessionInfo.expires_at,
+      duration_seconds: mockSessionInfo.duration_seconds,
+      created_at: mockSessionInfo.created_at,
+    },
+    cdn: mockSessionInfo.cdn,
+  };
+
   beforeEach(() => {
     config = {
       clientId: 'test-client',
@@ -101,7 +112,7 @@ describe('SessionManager', () => {
       // Mock successful response
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       const sessionInfo = await manager.authenticate();
@@ -139,7 +150,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       await manager.authenticate();
@@ -157,7 +168,7 @@ describe('SessionManager', () => {
       manager.on('authenticated', listener);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       await manager.authenticate();
@@ -169,7 +180,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       await manager.authenticate('custom-id', 'custom-secret');
@@ -195,7 +206,7 @@ describe('SessionManager', () => {
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => mockSessionInfo,
+          json: async () => mockApiResponse,
         });
 
       const sessionInfo = await manager.authenticate();
@@ -222,7 +233,7 @@ describe('SessionManager', () => {
       // Initial authenticate
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
       await manager.authenticate();
 
@@ -231,9 +242,18 @@ describe('SessionManager', () => {
         ...mockSessionInfo,
         expires_at: new Date(Date.now() + 10800000).toISOString(), // 3 hours
       };
+      const newApiResponse = {
+        status: 'success',
+        session: {
+          expires_at: newSession.expires_at,
+          duration_seconds: newSession.duration_seconds,
+          created_at: newSession.created_at,
+        },
+        cdn: newSession.cdn,
+      };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => newSession,
+        json: async () => newApiResponse,
       });
 
       const refreshedSession = await manager.refresh();
@@ -245,7 +265,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       await manager.authenticate();
@@ -262,7 +282,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       await manager.authenticate();
@@ -283,7 +303,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
       await manager.authenticate();
 
@@ -300,7 +320,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
       await manager.authenticate();
 
@@ -328,7 +348,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
       await manager.authenticate();
 
@@ -346,10 +366,19 @@ describe('SessionManager', () => {
         ...mockSessionInfo,
         expires_at: new Date(Date.now() + 60000).toISOString(), // 1 minute
       };
+      const soonToExpireApiResponse = {
+        status: 'success',
+        session: {
+          expires_at: soonToExpire.expires_at,
+          duration_seconds: soonToExpire.duration_seconds,
+          created_at: soonToExpire.created_at,
+        },
+        cdn: soonToExpire.cdn,
+      };
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => soonToExpire,
+        json: async () => soonToExpireApiResponse,
       });
       await manager.authenticate();
 
@@ -385,7 +414,7 @@ describe('SessionManager', () => {
       manager.on('authenticated', goodListener);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
 
       // Should not throw even though listener throws
@@ -401,7 +430,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockSessionInfo,
+        json: async () => mockApiResponse,
       });
       await manager.authenticate();
 

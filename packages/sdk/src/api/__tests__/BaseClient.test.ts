@@ -26,6 +26,16 @@ describe('BaseClient', () => {
     },
   };
 
+  const mockApiResponse = {
+    status: 'success',
+    session: {
+      expires_at: mockSessionInfo.expires_at,
+      duration_seconds: mockSessionInfo.duration_seconds,
+      created_at: mockSessionInfo.created_at,
+    },
+    cdn: mockSessionInfo.cdn,
+  };
+
   beforeEach(() => {
     config = {
       clientId: 'test-client',
@@ -251,7 +261,7 @@ describe('BaseClient', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => mockSessionInfo,
+          json: async () => mockApiResponse,
         })
         .mockResolvedValueOnce({
           ok: true,
