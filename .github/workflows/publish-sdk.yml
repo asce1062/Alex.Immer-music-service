@@ -162,15 +162,40 @@ jobs:
             CURRENT_VERSION=$(node -p "require('./package.json').version")
             echo "Base version for bump: $CURRENT_VERSION"
 
-            if [ "${{ inputs.version }}" = "prerelease" ]; then
-              # For prerelease bumps, use --preid to specify the tag
-              npm version prerelease --preid=${{ inputs.tag }} --no-git-tag-version
-            else
-              # For other bumps (patch, minor, major)
-              npm version ${{ inputs.version }} --no-git-tag-version
+            # Get all npm metadata including tombstoned versions (in 'time' but not 'versions')
+            NPM_METADATA=$(npm view @asce1062/music-service-sdk time --json 2>/dev/null || echo "{}")
+
+            # Bump version and check for tombstones
+            MAX_ATTEMPTS=10
+            ATTEMPT=0
+            while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+              if [ "${{ inputs.version }}" = "prerelease" ]; then
+                # For prerelease bumps, use --preid to specify the tag
+                npm version prerelease --preid=${{ inputs.tag }} --no-git-tag-version
+              else
+                # For other bumps (patch, minor, major)
+                npm version ${{ inputs.version }} --no-git-tag-version
+              fi
+
+              NEW_VERSION=$(node -p "require('./package.json').version")
+
+              # Check if this version is tombstoned (exists in time but was unpublished)
+              IS_TOMBSTONED=$(echo "$NPM_METADATA" | jq -r --arg ver "$NEW_VERSION" 'has($ver)')
+
+              if [ "$IS_TOMBSTONED" = "true" ]; then
+                echo "⚠️  Version $NEW_VERSION is tombstoned (unpublished), skipping to next version..."
+                ATTEMPT=$((ATTEMPT + 1))
+              else
+                echo "✓ Version $NEW_VERSION is available for publishing"
+                break
+              fi
+            done
+
+            if [ $ATTEMPT -ge $MAX_ATTEMPTS ]; then
+              echo "❌ Error: Could not find non-tombstoned version after $MAX_ATTEMPTS attempts"
+              exit 1
             fi
 
-            NEW_VERSION=$(node -p "require('./package.json').version")
             echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
             echo "Publishing ${{ inputs.version }} bump: $CURRENT_VERSION -> $NEW_VERSION"
