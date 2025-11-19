@@ -12,9 +12,12 @@ describe('SessionManager', () => {
   let config: Required<MusicServiceConfig>;
 
   const mockSessionInfo: SessionInfo = {
-    expires_at: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
-    duration_seconds: 7200,
-    created_at: new Date().toISOString(),
+    status: 'success',
+    session: {
+      expires_at: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
+      duration_seconds: 7200,
+      created_at: new Date().toISOString(),
+    },
     cdn: {
       base_url: 'https://cdn.example.com',
       albums_path: 'albums',
@@ -80,8 +83,13 @@ describe('SessionManager', () => {
       // Store an expired session
       const expiredSession = {
         sessionInfo: {
-          ...mockSessionInfo,
-          expires_at: new Date(Date.now() - 1000).toISOString(), // Already expired
+          status: 'success',
+          session: {
+            expires_at: new Date(Date.now() - 1000).toISOString(), // Already expired
+            duration_seconds: 7200,
+            created_at: new Date().toISOString(),
+          },
+          cdn: mockSessionInfo.cdn,
         },
         timestamp: Date.now(),
       };
@@ -227,9 +235,14 @@ describe('SessionManager', () => {
       await manager.authenticate();
 
       // Refresh
-      const newSession = {
-        ...mockSessionInfo,
-        expires_at: new Date(Date.now() + 10800000).toISOString(), // 3 hours
+      const newSession: SessionInfo = {
+        status: 'success',
+        session: {
+          expires_at: new Date(Date.now() + 10800000).toISOString(), // 3 hours
+          duration_seconds: 10800,
+          created_at: new Date().toISOString(),
+        },
+        cdn: mockSessionInfo.cdn,
       };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
@@ -238,7 +251,7 @@ describe('SessionManager', () => {
 
       const refreshedSession = await manager.refresh();
 
-      expect(refreshedSession.expires_at).toBe(newSession.expires_at);
+      expect(refreshedSession.session.expires_at).toBe(newSession.session.expires_at);
     });
 
     it('should emit refreshed event', async () => {
@@ -342,9 +355,14 @@ describe('SessionManager', () => {
     it('should indicate refresh needed when close to expiry', async () => {
       manager = new SessionManager(config);
 
-      const soonToExpire = {
-        ...mockSessionInfo,
-        expires_at: new Date(Date.now() + 60000).toISOString(), // 1 minute
+      const soonToExpire: SessionInfo = {
+        status: 'success',
+        session: {
+          expires_at: new Date(Date.now() + 60000).toISOString(), // 1 minute
+          duration_seconds: 60,
+          created_at: new Date().toISOString(),
+        },
+        cdn: mockSessionInfo.cdn,
       };
 
       (global.fetch as any).mockResolvedValueOnce({

@@ -14,9 +14,12 @@ describe('BaseClient', () => {
   let config: Required<MusicServiceConfig>;
 
   const mockSessionInfo: SessionInfo = {
-    expires_at: new Date(Date.now() + 7200000).toISOString(),
-    duration_seconds: 7200,
-    created_at: new Date().toISOString(),
+    status: 'success',
+    session: {
+      expires_at: new Date(Date.now() + 7200000).toISOString(),
+      duration_seconds: 7200,
+      created_at: new Date().toISOString(),
+    },
     cdn: {
       base_url: 'https://cdn.example.com',
       albums_path: 'albums',
