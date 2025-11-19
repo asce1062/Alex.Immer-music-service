@@ -38,9 +38,12 @@ export const CdnInfoSchema = z.object({
 });
 
 export const SessionInfoSchema = z.object({
-  expires_at: z.string().datetime(),
-  duration_seconds: z.number().int().positive(),
-  created_at: z.string().datetime().optional(),
+  status: z.string(),
+  session: z.object({
+    expires_at: z.string().datetime(),
+    duration_seconds: z.number().int().positive(),
+    created_at: z.string().datetime().optional(),
+  }),
   cdn: CdnInfoSchema,
 });
 

@@ -14,9 +14,12 @@ describe('BaseClient', () => {
   let config: Required<MusicServiceConfig>;
 
   const mockSessionInfo: SessionInfo = {
-    expires_at: new Date(Date.now() + 7200000).toISOString(),
-    duration_seconds: 7200,
-    created_at: new Date().toISOString(),
+    status: 'success',
+    session: {
+      expires_at: new Date(Date.now() + 7200000).toISOString(),
+      duration_seconds: 7200,
+      created_at: new Date().toISOString(),
+    },
     cdn: {
       base_url: 'https://cdn.example.com',
       albums_path: 'albums',
@@ -24,16 +27,6 @@ describe('BaseClient', () => {
       metadata_path: 'metadata',
       trackers_path: 'trackers',
     },
-  };
-
-  const mockApiResponse = {
-    status: 'success',
-    session: {
-      expires_at: mockSessionInfo.expires_at,
-      duration_seconds: mockSessionInfo.duration_seconds,
-      created_at: mockSessionInfo.created_at,
-    },
-    cdn: mockSessionInfo.cdn,
   };
 
   beforeEach(() => {
@@ -261,7 +254,7 @@ describe('BaseClient', () => {
         })
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => mockApiResponse,
+          json: async () => mockSessionInfo,
         })
         .mockResolvedValueOnce({
           ok: true,

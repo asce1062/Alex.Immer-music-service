@@ -73,7 +73,7 @@ export class SessionManager {
     const storedSession = this.loadSessionFromStorage();
 
     if (storedSession) {
-      const expiresAt = new Date(storedSession.sessionInfo.expires_at);
+      const expiresAt = new Date(storedSession.sessionInfo.session.expires_at);
       const now = new Date();
 
       // Check if session is still valid
@@ -137,27 +137,9 @@ export class SessionManager {
 
       const data: unknown = await response.json();
 
-      // Transform API response to SessionInfo structure
+      // Validate API response matching SessionInfo structure
       // API returns: { status, session: { expires_at, duration_seconds }, cdn: { ... } }
-      // SDK expects: { expires_at, duration_seconds, cdn: { ... } }
-      const apiResponse = data as {
-        status?: string;
-        session?: {
-          expires_at?: string;
-          duration_seconds?: number;
-          created_at?: string;
-        };
-        cdn?: unknown;
-      };
-
-      const transformedData = {
-        expires_at: apiResponse.session?.expires_at,
-        duration_seconds: apiResponse.session?.duration_seconds,
-        created_at: apiResponse.session?.created_at,
-        cdn: apiResponse.cdn,
-      };
-
-      const sessionInfo = validate(SessionInfoSchema, transformedData, 'SessionInfo');
+      const sessionInfo: SessionInfo = validate(SessionInfoSchema, data, 'SessionInfo');
 
       // Store session
       this.sessionInfo = sessionInfo;
@@ -173,7 +155,7 @@ export class SessionManager {
       this.emit('authenticated', sessionInfo);
 
       logger.info('Authentication successful', {
-        expiresAt: sessionInfo.expires_at,
+        expiresAt: sessionInfo.session.expires_at,
       });
 
       return sessionInfo;
@@ -265,7 +247,7 @@ export class SessionManager {
       };
     }
 
-    const expiresAt = new Date(this.sessionInfo.expires_at);
+    const expiresAt = new Date(this.sessionInfo.session.expires_at);
     const now = new Date();
     const timeUntilExpiry = expiresAt.getTime() - now.getTime();
     const needsRefresh = timeUntilExpiry < this.REFRESH_BEFORE_EXPIRY_MS;

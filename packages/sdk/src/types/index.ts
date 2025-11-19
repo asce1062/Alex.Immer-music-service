@@ -21,9 +21,12 @@ export interface MusicServiceConfig {
 // ============================================================================
 
 export interface SessionInfo {
-  expires_at: string;
-  duration_seconds: number;
-  created_at?: string;
+  status: string;
+  session: {
+    expires_at: string;
+    duration_seconds: number;
+    created_at?: string;
+  };
   cdn: CdnInfo;
 }
 

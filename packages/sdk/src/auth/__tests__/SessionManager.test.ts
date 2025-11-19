@@ -12,9 +12,12 @@ describe('SessionManager', () => {
   let config: Required<MusicServiceConfig>;
 
   const mockSessionInfo: SessionInfo = {
-    expires_at: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
-    duration_seconds: 7200,
-    created_at: new Date().toISOString(),
+    status: 'success',
+    session: {
+      expires_at: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
+      duration_seconds: 7200,
+      created_at: new Date().toISOString(),
+    },
     cdn: {
       base_url: 'https://cdn.example.com',
       albums_path: 'albums',
@@ -22,17 +25,6 @@ describe('SessionManager', () => {
       metadata_path: 'metadata',
       trackers_path: 'trackers',
     },
-  };
-
-  // Mock API response (as returned by the API)
-  const mockApiResponse = {
-    status: 'success',
-    session: {
-      expires_at: mockSessionInfo.expires_at,
-      duration_seconds: mockSessionInfo.duration_seconds,
-      created_at: mockSessionInfo.created_at,
-    },
-    cdn: mockSessionInfo.cdn,
   };
 
   beforeEach(() => {
@@ -91,8 +83,13 @@ describe('SessionManager', () => {
       // Store an expired session
       const expiredSession = {
         sessionInfo: {
-          ...mockSessionInfo,
-          expires_at: new Date(Date.now() - 1000).toISOString(), // Already expired
+          status: 'success',
+          session: {
+            expires_at: new Date(Date.now() - 1000).toISOString(), // Already expired
+            duration_seconds: 7200,
+            created_at: new Date().toISOString(),
+          },
+          cdn: mockSessionInfo.cdn,
         },
         timestamp: Date.now(),
       };
@@ -112,7 +109,7 @@ describe('SessionManager', () => {
       // Mock successful response
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       const sessionInfo = await manager.authenticate();
@@ -150,7 +147,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       await manager.authenticate();
@@ -168,7 +165,7 @@ describe('SessionManager', () => {
       manager.on('authenticated', listener);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       await manager.authenticate();
@@ -180,7 +177,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       await manager.authenticate('custom-id', 'custom-secret');
@@ -206,7 +203,7 @@ describe('SessionManager', () => {
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => mockApiResponse,
+          json: async () => mockSessionInfo,
         });
 
       const sessionInfo = await manager.authenticate();
@@ -233,39 +230,35 @@ describe('SessionManager', () => {
       // Initial authenticate
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
       await manager.authenticate();
 
       // Refresh
-      const newSession = {
-        ...mockSessionInfo,
-        expires_at: new Date(Date.now() + 10800000).toISOString(), // 3 hours
-      };
-      const newApiResponse = {
+      const newSession: SessionInfo = {
         status: 'success',
         session: {
-          expires_at: newSession.expires_at,
-          duration_seconds: newSession.duration_seconds,
-          created_at: newSession.created_at,
+          expires_at: new Date(Date.now() + 10800000).toISOString(), // 3 hours
+          duration_seconds: 10800,
+          created_at: new Date().toISOString(),
         },
-        cdn: newSession.cdn,
+        cdn: mockSessionInfo.cdn,
       };
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => newApiResponse,
+        json: async () => newSession,
       });
 
       const refreshedSession = await manager.refresh();
 
-      expect(refreshedSession.expires_at).toBe(newSession.expires_at);
+      expect(refreshedSession.session.expires_at).toBe(newSession.session.expires_at);
     });
 
     it('should emit refreshed event', async () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       await manager.authenticate();
@@ -282,7 +275,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValue({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       await manager.authenticate();
@@ -303,7 +296,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
       await manager.authenticate();
 
@@ -320,7 +313,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
       await manager.authenticate();
 
@@ -348,7 +341,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
       await manager.authenticate();
 
@@ -362,23 +355,19 @@ describe('SessionManager', () => {
     it('should indicate refresh needed when close to expiry', async () => {
       manager = new SessionManager(config);
 
-      const soonToExpire = {
-        ...mockSessionInfo,
-        expires_at: new Date(Date.now() + 60000).toISOString(), // 1 minute
-      };
-      const soonToExpireApiResponse = {
+      const soonToExpire: SessionInfo = {
         status: 'success',
         session: {
-          expires_at: soonToExpire.expires_at,
-          duration_seconds: soonToExpire.duration_seconds,
-          created_at: soonToExpire.created_at,
+          expires_at: new Date(Date.now() + 60000).toISOString(), // 1 minute
+          duration_seconds: 60,
+          created_at: new Date().toISOString(),
         },
-        cdn: soonToExpire.cdn,
+        cdn: mockSessionInfo.cdn,
       };
 
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => soonToExpireApiResponse,
+        json: async () => soonToExpire,
       });
       await manager.authenticate();
 
@@ -414,7 +403,7 @@ describe('SessionManager', () => {
       manager.on('authenticated', goodListener);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
 
       // Should not throw even though listener throws
@@ -430,7 +419,7 @@ describe('SessionManager', () => {
       manager = new SessionManager(config);
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
-        json: async () => mockApiResponse,
+        json: async () => mockSessionInfo,
       });
       await manager.authenticate();
 
