@@ -228,8 +228,8 @@ jobs:
 
       - name: Publish to npm
         if: inputs.dry_run != true
+        working-directory: packages/sdk
         run: |
-          cd packages/sdk
           echo "Publishing @asce1062/music-service-sdk@${{ steps.version.outputs.version }} to npm..."
           npm publish --tag ${{ steps.version.outputs.tag }} --access public
 
