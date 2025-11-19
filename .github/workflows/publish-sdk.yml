@@ -48,10 +48,62 @@ jobs:
   publish:
     name: Publish SDK to npm
     runs-on: ubuntu-latest
-    # Only run on main branch or release tags
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
 
     steps:
+      - name: Validate branch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "❌ ERROR: SDK can only be published from the main branch"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo ""
+            echo "Current branch: ${{ github.ref_name }}"
+            echo "Required branch: main"
+            echo ""
+            echo "📋 To publish the SDK, please follow these steps:"
+            echo ""
+            echo "1. Go to: Actions → Publish SDK to npm"
+            echo "2. Click 'Run workflow' button"
+            echo "3. Select 'main' from the branch dropdown"
+            echo "4. Configure your version bump options"
+            echo "5. Click 'Run workflow'"
+            echo ""
+            echo "ℹ️  Why this restriction?"
+            echo "   Publishing from main ensures:"
+            echo "   - Version consistency across the codebase"
+            echo "   - Proper version bump tracking in git history"
+            echo "   - Automated PR creation works correctly"
+            echo "   - Release tags are created on the correct branch"
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            # Also add to GitHub Actions summary
+            echo "## ❌ Publishing Failed - Wrong Branch" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Current branch**: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "**Required branch**: \`main\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📋 How to Fix" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "1. Go to **Actions** → **Publish SDK to npm**" >> $GITHUB_STEP_SUMMARY
+            echo "2. Click **Run workflow**" >> $GITHUB_STEP_SUMMARY
+            echo "3. Select **main** from the branch dropdown" >> $GITHUB_STEP_SUMMARY
+            echo "4. Configure your version bump options" >> $GITHUB_STEP_SUMMARY
+            echo "5. Click **Run workflow**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ℹ️ Why This Restriction?" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Publishing from main ensures:" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ Version consistency across the codebase" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ Proper version bump tracking in git history" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ Automated PR creation works correctly" >> $GITHUB_STEP_SUMMARY
+            echo "- ✓ Release tags are created on the correct branch" >> $GITHUB_STEP_SUMMARY
+
+            exit 1
+          fi
+          echo "✓ Branch validation passed: running on main"
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -93,9 +145,21 @@ jobs:
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
             echo "Publishing custom version: ${{ inputs.custom_version }}"
           else
-            # Smart version bumping for prereleases
+            # Get the latest published version from npm as source of truth
+            PUBLISHED_VERSION=$(npm view @asce1062/music-service-sdk version 2>/dev/null || echo "0.0.0")
+            REPO_VERSION=$(node -p "require('./package.json').version")
+
+            echo "Published version on npm: $PUBLISHED_VERSION"
+            echo "Repository package.json version: $REPO_VERSION"
+
+            # Sync package.json with npm if out of sync
+            if [ "$PUBLISHED_VERSION" != "$REPO_VERSION" ] && [ "$PUBLISHED_VERSION" != "0.0.0" ]; then
+              echo "⚠️  Versions out of sync! Syncing package.json to npm version: $PUBLISHED_VERSION"
+              npm version $PUBLISHED_VERSION --no-git-tag-version --allow-same-version
+            fi
+
             CURRENT_VERSION=$(node -p "require('./package.json').version")
-            echo "Current version: $CURRENT_VERSION"
+            echo "Base version for bump: $CURRENT_VERSION"
 
             if [ "${{ inputs.version }}" = "prerelease" ]; then
               # For prerelease bumps, use --preid to specify the tag
@@ -172,60 +236,77 @@ jobs:
           echo "Updating 'latest' tag to point to ${{ steps.version.outputs.version }}..."
           npm dist-tag add @asce1062/music-service-sdk@${{ steps.version.outputs.version }} latest
 
-      - name: Commit version bump
+      - name: Create Pull Request for version bump
         if: github.event_name != 'release' && inputs.dry_run != true
-        run: |
-          git add packages/sdk/package.json
-          git commit -m "chore(sdk): bump version to ${{ steps.version.outputs.version }}" || echo "No changes to commit"
-          git push origin ${{ github.ref_name }} || echo "No changes to push"
-
-      - name: Create Git tag
-        if: github.event_name != 'release' && inputs.dry_run != true
-        run: |
-          TAG_NAME="sdk-v${{ steps.version.outputs.version }}"
-          git tag -a "$TAG_NAME" -m "SDK Release ${{ steps.version.outputs.version }}"
-          git push origin "$TAG_NAME"
-
-      - name: Generate release notes
-        if: inputs.dry_run != true
-        id: release_notes
-        run: |
-          cd packages/sdk
-
-          echo "## 📦 Published" >> notes.md
-          echo "" >> notes.md
-          echo "- **Package**: \`@asce1062/music-service-sdk\`" >> notes.md
-          echo "- **Version**: \`${{ steps.version.outputs.version }}\`" >> notes.md
-          echo "- **Tag**: \`${{ steps.version.outputs.tag }}\`" >> notes.md
-          echo "- **npm**: https://www.npmjs.com/package/@asce1062/music-service-sdk/v/${{ steps.version.outputs.version }}" >> notes.md
-          echo "" >> notes.md
-          echo "## 📋 Installation" >> notes.md
-          echo "" >> notes.md
-          echo "\`\`\`bash" >> notes.md
-          echo "npm install @asce1062/music-service-sdk@${{ steps.version.outputs.version }}" >> notes.md
-          echo "\`\`\`" >> notes.md
-          echo "" >> notes.md
-          echo "## ✅ Quality Checks" >> notes.md
-          echo "" >> notes.md
-          echo "- ✓ Type checking passed" >> notes.md
-          echo "- ✓ Linting passed" >> notes.md
-          echo "- ✓ Tests passed with coverage" >> notes.md
-          echo "- ✓ Build successful (ESM, CJS, IIFE, DTS)" >> notes.md
-          echo "- ✓ npm provenance enabled" >> notes.md
-
-          cat notes.md >> $GITHUB_STEP_SUMMARY
-
-      - name: Create GitHub Release
-        if: github.event_name != 'release' && inputs.dry_run != true
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: peter-evans/create-pull-request@v6
         with:
-          tag_name: sdk-v${{ steps.version.outputs.version }}
-          release_name: SDK v${{ steps.version.outputs.version }}
-          body_path: packages/sdk/notes.md
-          draft: false
-          prerelease: ${{ steps.version.outputs.tag != 'latest' }}
+          commit-message: "chore(sdk): bump version to ${{ steps.version.outputs.version }}"
+          title: "chore(sdk): Release v${{ steps.version.outputs.version }}"
+          body: |
+            ## 📦 SDK Release v${{ steps.version.outputs.version }}
+
+            This PR updates the package.json version after successful npm publication.
+
+            ### Published Package
+            - **Version**: `${{ steps.version.outputs.version }}`
+            - **Tag**: `${{ steps.version.outputs.tag }}`
+            - **npm**: https://www.npmjs.com/package/@asce1062/music-service-sdk/v/${{ steps.version.outputs.version }}
+
+            ### Quality Checks ✅
+            - ✓ Type checking passed
+            - ✓ Linting passed
+            - ✓ Tests passed with coverage
+            - ✓ Build successful (ESM, CJS, IIFE, DTS)
+            - ✓ Published to npm
+            - ✓ npm provenance enabled
+
+            ### Installation
+            ```bash
+            npm install @asce1062/music-service-sdk@${{ steps.version.outputs.version }}
+            ```
+
+            ---
+
+            🤖 This PR was automatically created by the [SDK Publishing Workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            **Note**: After merging this PR, the git tag `sdk-v${{ steps.version.outputs.version }}` will be created automatically.
+          branch: release/sdk-v${{ steps.version.outputs.version }}
+          delete-branch: true
+          labels: |
+            release
+            automated
+            sdk
+          assignees: ${{ github.actor }}
+
+      - name: Add workflow summary
+        if: inputs.dry_run != true
+        run: |
+          echo "## 📦 Published to npm" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package**: \`@asce1062/music-service-sdk\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`${{ steps.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tag**: \`${{ steps.version.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **npm**: https://www.npmjs.com/package/@asce1062/music-service-sdk/v/${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📋 Installation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "npm install @asce1062/music-service-sdk@${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Quality Checks" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Type checking passed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Linting passed" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Tests passed with coverage" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Build successful (ESM, CJS, IIFE, DTS)" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ Published to npm" >> $GITHUB_STEP_SUMMARY
+          echo "- ✓ npm provenance enabled" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔀 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "A pull request will be created to update package.json." >> $GITHUB_STEP_SUMMARY
+          echo "After merging the PR, a git tag and GitHub release will be created automatically." >> $GITHUB_STEP_SUMMARY
 
       - name: Publish summary
         if: always()
