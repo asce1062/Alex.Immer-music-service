@@ -258,15 +258,9 @@ jobs:
           echo "Publishing @asce1062/music-service-sdk@${{ steps.version.outputs.version }} to npm..."
           npm publish --tag ${{ steps.version.outputs.tag }} --access public
           echo "✅ Published to npm with tag: ${{ steps.version.outputs.tag }}"
-
-      - name: Update latest dist-tag
-        if: inputs.dry_run != true
-        run: |
-          # Update 'latest' tag to point to newest version
-          # Run from monorepo root where OIDC auth is properly configured
-          echo "Updating 'latest' dist-tag to point to ${{ steps.version.outputs.version }}..."
-          npm dist-tag add @asce1062/music-service-sdk@${{ steps.version.outputs.version }} latest
-          echo "✅ Updated 'latest' dist-tag"
+          echo ""
+          echo "📦 Installation:"
+          echo "  npm install @asce1062/music-service-sdk@${{ steps.version.outputs.tag }}"
 
       - name: Create Pull Request for version bump
         if: github.event_name != 'release' && inputs.dry_run != true
