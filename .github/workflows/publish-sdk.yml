@@ -93,16 +93,26 @@ jobs:
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
             echo "Publishing custom version: ${{ inputs.custom_version }}"
           else
-            # Use npm version command for bump
-            npm version ${{ inputs.version }} --no-git-tag-version
+            # Smart version bumping for prereleases
+            CURRENT_VERSION=$(node -p "require('./package.json').version")
+            echo "Current version: $CURRENT_VERSION"
+
+            if [ "${{ inputs.version }}" = "prerelease" ]; then
+              # For prerelease bumps, use --preid to specify the tag
+              npm version prerelease --preid=${{ inputs.tag }} --no-git-tag-version
+            else
+              # For other bumps (patch, minor, major)
+              npm version ${{ inputs.version }} --no-git-tag-version
+            fi
+
             NEW_VERSION=$(node -p "require('./package.json').version")
             echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-            echo "Publishing ${{ inputs.version }} bump: $NEW_VERSION"
+            echo "Publishing ${{ inputs.version }} bump: $CURRENT_VERSION -> $NEW_VERSION"
           fi
 
       - name: Update version in package.json
-        if: github.event_name != 'release'
+        if: github.event_name != 'release' && inputs.version == 'custom'
         run: |
           cd packages/sdk
           npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
