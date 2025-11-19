@@ -145,11 +145,12 @@ jobs:
             echo "tag=${{ inputs.tag }}" >> $GITHUB_OUTPUT
             echo "Publishing custom version: ${{ inputs.custom_version }}"
           else
-            # Get the latest published version from npm as source of truth
-            PUBLISHED_VERSION=$(npm view @asce1062/music-service-sdk version 2>/dev/null || echo "0.0.0")
+            # Get the actual latest published version from npm (not just 'latest' tag)
+            # This gets ALL published versions and picks the highest one
+            PUBLISHED_VERSION=$(npm view @asce1062/music-service-sdk versions --json 2>/dev/null | jq -r '.[-1]' || echo "0.0.0")
             REPO_VERSION=$(node -p "require('./package.json').version")
 
-            echo "Published version on npm: $PUBLISHED_VERSION"
+            echo "Latest published version on npm (any tag): $PUBLISHED_VERSION"
             echo "Repository package.json version: $REPO_VERSION"
 
             # Sync package.json with npm if out of sync
