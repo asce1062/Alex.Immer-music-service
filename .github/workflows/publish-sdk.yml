@@ -267,11 +267,12 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "chore(sdk): bump version to ${{ steps.version.outputs.version }}"
+          commit-options: "--no-verify"
           title: "chore(sdk): Release v${{ steps.version.outputs.version }}"
           body: |
             ## 📦 SDK Release v${{ steps.version.outputs.version }}
 
-            This PR updates the package.json version after successful npm publication.
+            This PR updates the package.json and package-lock.json versions after successful npm publication.
 
             ### Published Package
             - **Version**: `${{ steps.version.outputs.version }}`
