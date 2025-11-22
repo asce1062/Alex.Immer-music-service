@@ -71,7 +71,7 @@ export class MusicServiceClient {
    *
    * // Subscribe to events
    * client.playback.on('play', (track) => {
-   *   console.log('Playing:', track.title)
+   *   console.log('Playing:', track.track_name)
    * })
    * ```
    */

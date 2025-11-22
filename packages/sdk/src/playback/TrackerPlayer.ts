@@ -334,8 +334,10 @@ export class TrackerPlayer {
   }
 
   private async loadTracker(tracker: TrackerModule): Promise<void> {
-    // Fetch tracker module
-    const response = await fetch(tracker.tracker_cdn_url);
+    // Fetch tracker module with CloudFront signed cookies
+    const response = await fetch(tracker.tracker_cdn_url, {
+      credentials: 'include',
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch tracker: ${response.statusText}`);
     }
