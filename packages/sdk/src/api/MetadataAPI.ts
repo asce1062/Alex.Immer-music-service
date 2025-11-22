@@ -115,7 +115,7 @@ export class MetadataAPI {
    */
   async getManifest(): Promise<Manifest> {
     const cdn = this.getCDNInfo();
-    const url = `${cdn.base_url}/${cdn.metadata_path}/manifest.json`;
+    const url = this.joinUrl(cdn.base_url, cdn.metadata_path, 'manifest.json');
     const cacheKey = 'manifest';
 
     logger.debug('Fetching manifest', { url });
@@ -160,7 +160,7 @@ export class MetadataAPI {
    */
   async getAllAlbums(): Promise<Album[]> {
     const cdn = this.getCDNInfo();
-    const url = `${cdn.base_url}/${cdn.metadata_path}/albums.json`;
+    const url = this.joinUrl(cdn.base_url, cdn.metadata_path, 'albums.json');
     const cacheKey = 'albums';
 
     logger.debug('Fetching all albums', { url });
@@ -201,7 +201,7 @@ export class MetadataAPI {
    */
   async getAllTracks(): Promise<Track[]> {
     const cdn = this.getCDNInfo();
-    const url = `${cdn.base_url}/${cdn.metadata_path}/tracks.json`;
+    const url = this.joinUrl(cdn.base_url, cdn.metadata_path, 'tracks.json');
     const cacheKey = 'tracks';
 
     logger.debug('Fetching all tracks', { url });
@@ -241,7 +241,7 @@ export class MetadataAPI {
    */
   async getAllTrackers(): Promise<TrackerModule[]> {
     const cdn = this.getCDNInfo();
-    const url = `${cdn.base_url}/${cdn.metadata_path}/tracker.json`;
+    const url = this.joinUrl(cdn.base_url, cdn.metadata_path, 'tracker.json');
     const cacheKey = 'trackers';
 
     logger.debug('Fetching all trackers', { url });
@@ -281,7 +281,7 @@ export class MetadataAPI {
    */
   async getUnreleasedTrackers(): Promise<TrackerModule[]> {
     const cdn = this.getCDNInfo();
-    const url = `${cdn.base_url}/${cdn.metadata_path}/unreleased.json`;
+    const url = this.joinUrl(cdn.base_url, cdn.metadata_path, 'unreleased.json');
     const cacheKey = 'unreleased';
 
     logger.debug('Fetching unreleased trackers', { url });
@@ -470,5 +470,35 @@ export class MetadataAPI {
       throw new AuthenticationError('Not authenticated. Call authenticate() first.');
     }
     return sessionInfo.cdn;
+  }
+
+  /**
+   * Join URL parts while handling leading/trailing slashes correctly
+   * Prevents double slashes in URLs
+   *
+   * @param base - Base URL (e.g., "https://cdn.example.com")
+   * @param parts - URL parts to join (e.g., "/metadata", "albums.json")
+   * @returns Properly joined URL without double slashes
+   *
+   * @example
+   * joinUrl("https://cdn.example.com", "/metadata", "albums.json")
+   * // Returns: "https://cdn.example.com/metadata/albums.json"
+   */
+  private joinUrl(base: string, ...parts: string[]): string {
+    // Remove trailing slash from base
+    let url = base.replace(/\/+$/, '');
+
+    // Add each part, ensuring single slashes between them
+    for (const part of parts) {
+      if (part) {
+        // Remove leading and trailing slashes from part
+        const cleanPart = part.replace(/^\/+/, '').replace(/\/+$/, '');
+        if (cleanPart) {
+          url += `/${cleanPart}`;
+        }
+      }
+    }
+
+    return url;
   }
 }

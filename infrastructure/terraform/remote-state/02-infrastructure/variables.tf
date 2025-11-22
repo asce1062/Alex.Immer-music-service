@@ -62,11 +62,22 @@ variable "cloudfront_price_class" {
   default     = "PriceClass_All" # Global distribution - all edge locations
 }
 
-variable "cache_policy_id" {
-  description = "CloudFront cache policy ID (Managed-CachingDisabled - prevents cookie-based cache collisions)"
-  type        = string
-  default     = "658327ea-f89d-4fab-a63d-7e88639e58f6" # Managed-CachingDisabled - AWS managed caching
-}
+# ============================================================================
+# DEPRECATED: cache_policy_id variable
+# ============================================================================
+# This variable is no longer used. The infrastructure now uses a custom cache
+# policy with Origin header forwarding for CORS support (see cloudfront-cors.tf).
+#
+# The custom policy provides:
+# - Origin header forwarding for proper CORS handling
+# - OPTIONS method not cached (preflight responses stay fresh)
+# - Gzip and Brotli compression enabled
+# ============================================================================
+# variable "cache_policy_id" {
+#   description = "DEPRECATED - Use custom CORS cache policy instead"
+#   type        = string
+#   default     = "658327ea-f89d-4fab-a63d-7e88639e58f6"
+# }
 
 # ============================================================================
 # Referer Allowlist - REMOVED
