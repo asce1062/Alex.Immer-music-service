@@ -149,6 +149,60 @@ resource "aws_s3_bucket_public_access_block" "music" {
 #   }
 # }
 
+# ============================================================================
+# S3 Bucket CORS Configuration
+# ============================================================================
+# CORS configuration for the S3 bucket (backup layer).
+# Primary CORS handling is via CloudFront response headers policy,
+# but S3 CORS provides a fallback layer if needed.
+#
+# Note: Must match allowed origins in API Gateway, Lambda, and CloudFront
+# ============================================================================
+resource "aws_s3_bucket_cors_configuration" "music" {
+  bucket = aws_s3_bucket.music.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+
+    # Production domains + development localhost
+    # Must match CloudFront response headers policy
+    allowed_origins = [
+      # Production domains
+      "https://alexmbugua.me",
+      "https://www.alexmbugua.me",
+      "https://asce1062.github.io",
+      "https://music.alexmbugua.me",
+      "https://alexmbugua.netlify.app",
+
+      # Development - localhost (various ports)
+      "http://localhost:4321",
+      "http://localhost:4322",
+      "http://localhost:3000",
+      "http://localhost:8080",
+      "http://localhost:8888",
+
+      # Development - 127.0.0.1 (various ports)
+      "http://127.0.0.1:4321",
+      "http://127.0.0.1:4322",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:8080",
+      "http://127.0.0.1:8888",
+    ]
+
+    # Headers exposed to browser JavaScript
+    expose_headers = [
+      "ETag",
+      "Content-Length",
+      "Content-Type",
+      "Last-Modified",
+    ]
+
+    # Cache preflight responses for 5 minutes
+    max_age_seconds = 300
+  }
+}
+
 # S3 bucket policy - allows CloudFront OAC access only
 resource "aws_s3_bucket_policy" "music" {
   bucket = aws_s3_bucket.music.id
@@ -241,14 +295,17 @@ resource "aws_cloudfront_distribution" "cdn" {
     compress               = true
 
     allowed_methods = ["GET", "HEAD", "OPTIONS"]
-    cached_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods  = ["GET", "HEAD"] # OPTIONS not cached (preflight shouldn't be stale)
 
-    # Use AWS managed caching policy
-    cache_policy_id = var.cache_policy_id
+    # Use custom cache policy with Origin header forwarding for CORS
+    cache_policy_id = aws_cloudfront_cache_policy.cors_cache_policy.id
+
+    # Add CORS response headers policy
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.cors_policy.id
 
     # Require signed cookies for viewer authentication
-    # NOTE: This works with OAC because we removed origin_request_policy_id
-    # CloudFront validates cookies for viewers but doesn't forward them to S3
+    # NOTE: This works with OAC - CloudFront validates cookies for viewers
+    # but doesn't forward them to S3 (cookies not in cache policy)
     trusted_key_groups = [aws_cloudfront_key_group.music_service.id]
   }
 

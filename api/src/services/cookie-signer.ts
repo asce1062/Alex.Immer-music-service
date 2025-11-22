@@ -69,20 +69,29 @@ function base64UrlEncode(buffer: Buffer): string {
 
 /**
  * Format cookies for Set-Cookie header
+ *
+ * @param cookies - CloudFront signed cookies to format
+ * @param domain - Cookie domain attribute (null for origin-bound cookies)
+ * @param maxAge - Cookie max age in seconds
+ * @returns Array of Set-Cookie header values
  */
 export function formatCookiesForHeaders(
   cookies: SignedCookies,
-  domain: string,
+  domain: string | null,
   maxAge: number
 ): string[] {
+  // Build cookie attributes array, filtering out null values
   const cookieAttributes = [
-    `Domain=${domain}`,
+    domain ? `Domain=${domain}` : null, // Only set Domain if provided
     'Path=/',
     'Secure',
     'HttpOnly',
-    'SameSite=Lax',
+    'SameSite=None', // Required for cross-origin requests with credentials
+    'Partitioned', // Required for cross-site cookies (Chrome 115+, Privacy Sandbox)
     `Max-Age=${maxAge}`,
-  ].join('; ');
+  ]
+    .filter(Boolean) // Remove null values
+    .join('; ');
 
   return [
     `CloudFront-Policy=${cookies['CloudFront-Policy']}; ${cookieAttributes}`,

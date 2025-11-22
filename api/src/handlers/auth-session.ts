@@ -77,12 +77,13 @@ export const handler: Handler<APIGatewayProxyEventV2, APIGatewayProxyResultV2> =
 
     const signedCookies = await generateSignedCookies(resourceUrl, expiresInSeconds);
 
-    // Determine cookie domain based on origin
-    let cookieDomain = `.alexmbugua.me`;
-    if (headers.origin?.includes('github.io')) {
-      // For GitHub Pages, still use .alexmbugua.me since CDN is there
-      cookieDomain = `.alexmbugua.me`;
-    }
+    // Set cookie domain to share cookies across all subdomains
+    // This is necessary because:
+    // 1. Cookies are set by the API (music-api.alexmbugua.me)
+    // 2. Cookies must work on the CDN (cdn.alexmbugua.me)
+    // 3. Browsers can receive .alexmbugua.me cookies from localhost requests
+    //    and will send them to any alexmbugua.me subdomain (SameSite=None enables this)
+    const cookieDomain = '.alexmbugua.me';
 
     // Format cookies for Set-Cookie header
     const cookieHeaders = formatCookiesForHeaders(signedCookies, cookieDomain, expiresInSeconds);
