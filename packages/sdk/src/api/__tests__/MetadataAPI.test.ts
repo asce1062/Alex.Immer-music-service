@@ -63,7 +63,11 @@ describe('MetadataAPI', () => {
         metadata: 'album1.json',
       },
     ],
-    cdn: mockSessionInfo.cdn,
+    cdn: {
+      base_url: 'https://cdn.example.com',
+      albums_root: 'https://cdn.example.com/albums/',
+      trackers_root: 'https://cdn.example.com/tracker/',
+    },
     integrity: {
       checksums: {},
     },
@@ -103,13 +107,13 @@ describe('MetadataAPI', () => {
 
   const mockTrack: Track = {
     track_id: 'album1_01',
-    title: 'Test Track',
+    track_name: 'Test Track',
     artist: 'Test Artist',
     album: 'Test Album',
     album_id: 'album1',
-    track_number: 1,
+    track_position: '01',
     duration_seconds: 273,
-    duration_human: '4:33',
+    duration: '4:33',
     bit_rate_kbps: 320,
     file_size_bytes: 10000000,
     file_size: '10 MB',
@@ -117,8 +121,9 @@ describe('MetadataAPI', () => {
     sample_rate: '44.1 kHz',
     channels: 'Stereo',
     genre: 'Electronic',
-    year: '2024',
-    bpm: 130,
+    recorded_date: '2024',
+    bpm: '130',
+    bpm_numeric: 130,
     explicit: false,
     checksum: { algorithm: 'sha256', value: 'def456' },
     content_length: 10000000,
@@ -132,8 +137,8 @@ describe('MetadataAPI', () => {
   const mockTrack2: Track = {
     ...mockTrack,
     track_id: 'album1_02',
-    title: 'Test Track 2',
-    track_number: 2,
+    track_name: 'Test Track 2',
+    track_position: '02',
   };
 
   const mockTracker: TrackerModule = {

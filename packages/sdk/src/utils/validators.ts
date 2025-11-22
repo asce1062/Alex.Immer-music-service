@@ -76,22 +76,23 @@ export const LinkedTrackerSchema = z.object({
 
 export const TrackSchema = z.object({
   track_id: z.string(),
-  title: z.string(),
+  track_name: z.string(),
   artist: z.string(),
   album: z.string(),
   album_id: z.string(),
-  track_number: z.number().int().positive(),
-  duration_seconds: z.number().nonnegative(),
-  duration_human: z.string(),
+  track_position: z.string(),
+  duration_seconds: z.number().int().nonnegative(),
+  duration: z.string(),
   bit_rate_kbps: z.number().int().positive(),
   file_size_bytes: z.number().int().nonnegative(),
   file_size: z.string(),
   format: z.string(),
-  sample_rate: z.string(),
-  channels: z.string(),
+  sample_rate: z.string().optional(),
+  channels: z.string().optional(),
   genre: z.string(),
-  year: z.string(),
-  bpm: z.number().nonnegative(),
+  recorded_date: z.string(),
+  bpm: z.string().optional(),
+  bpm_numeric: z.number().nonnegative(),
   explicit: z.boolean(),
   checksum: ChecksumSchema,
   content_length: z.number().int().nonnegative(),
@@ -163,7 +164,10 @@ export const TrackerModuleSchema = z.object({
   linked: z.boolean(),
   album: z.string().optional(),
   albums_cdn_url: z.string().url().optional(),
+  albums_s3_url: z.string().url().optional(),
   tracker_cdn_url: z.string().url(),
+  tracker_s3_url: z.string().url().optional(),
+  complete_name: z.string().optional(),
   linked_master: z
     .object({
       track_id: z.string(),
@@ -189,6 +193,22 @@ export const ManifestSchema = z.object({
   schema_version: z.string(),
   content_type: z.literal('metadata'),
   generated_at: z.string().datetime(),
+  cache_info: z
+    .object({
+      strategy: z.string(),
+      ttl_seconds: z.number().int().positive(),
+      local_cache_path: z.string(),
+    })
+    .passthrough()
+    .optional(),
+  artist: z
+    .object({
+      name: z.string(),
+      url: z.string().url(),
+      contact: z.string().email(),
+    })
+    .passthrough()
+    .optional(),
   catalog: z.object({
     released_albums: z.number().int().nonnegative(),
     unreleased_collections: z.number().int().nonnegative(),
@@ -198,9 +218,51 @@ export const ManifestSchema = z.object({
     total_size_bytes: z.number().int().nonnegative(),
     total_duration_seconds: z.number().nonnegative(),
   }),
+  resources: z
+    .object({
+      albums_index: z.string().url(),
+      tracks_index: z.string().url(),
+      tracker_index: z.string().url(),
+      unreleased_index: z.string().url(),
+    })
+    .passthrough()
+    .optional(),
+  covers: z
+    .object({
+      base_url: z.string().url(),
+      thumbs_url: z.string().url(),
+      default_cover: z.string().url(),
+    })
+    .optional(),
+  cdn: z.object({
+    base_url: z.string().url(),
+    albums_root: z.string().url().optional(),
+    trackers_root: z.string().url().optional(),
+  }),
   albums: z.array(AlbumSummarySchema),
-  cdn: CdnInfoSchema,
+  tracker_files: z
+    .object({
+      released: z.string().url(),
+      unreleased: z.string().url(),
+    })
+    .optional(),
+  service_worker: z
+    .object({
+      cache_strategy: z.string(),
+      cached_endpoints: z.array(z.string()),
+    })
+    .passthrough()
+    .optional(),
+  api: z
+    .object({
+      rest_entrypoint: z.string().url(),
+      graphql_entrypoint: z.string().url(),
+      examples: z.record(z.string()),
+    })
+    .passthrough()
+    .optional(),
   integrity: z.object({
+    hash_type: z.string().optional(),
     checksums: z.record(
       z.object({
         value: z.string(),

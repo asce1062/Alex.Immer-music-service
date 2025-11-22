@@ -116,9 +116,9 @@ export class DownloadManager {
       item: track,
       status: 'pending',
       priority,
-      progress: this.createInitialProgress(track.title),
+      progress: this.createInitialProgress(track.track_name),
       url: track.cdn_url,
-      filename: `${track.artist} - ${track.title}.${track.format}`,
+      filename: `${track.artist} - ${track.track_name}.${track.format}`,
       fileSize: track.file_size_bytes,
       createdAt: new Date(),
       retryCount: 0,
@@ -146,9 +146,9 @@ export class DownloadManager {
         item: track,
         status: 'pending',
         priority,
-        progress: this.createInitialProgress(track.title),
+        progress: this.createInitialProgress(track.track_name),
         url: track.cdn_url,
-        filename: `${album.artist} - ${album.album}/${track.artist} - ${track.title}.${track.format}`,
+        filename: `${album.artist} - ${album.album}/${track.artist} - ${track.track_name}.${track.format}`,
         fileSize: track.file_size_bytes,
         createdAt: new Date(),
         retryCount: 0,
@@ -600,8 +600,10 @@ export class DownloadManager {
 
   private async executeDownload(item: DownloadItem): Promise<void> {
     try {
-      // Simulate download (in a real implementation, use fetch with progress)
-      const response = await fetch(item.url);
+      // Download with CloudFront signed cookies
+      const response = await fetch(item.url, {
+        credentials: 'include',
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -843,7 +845,7 @@ export class DownloadManager {
     artist: string;
   } {
     if ('track_id' in item) {
-      return { id: item.track_id, title: item.title, artist: item.artist };
+      return { id: item.track_id, title: item.track_name, artist: item.artist };
     }
     if ('album_id' in item) {
       return { id: item.album_id, title: item.album, artist: item.artist };

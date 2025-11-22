@@ -53,6 +53,18 @@ export interface Manifest {
   schema_version: string;
   content_type: string;
   generated_at: string;
+  cache_info?: {
+    strategy: string;
+    ttl_seconds: number;
+    local_cache_path: string;
+    [key: string]: unknown;
+  };
+  artist?: {
+    name: string;
+    url: string;
+    contact: string;
+    [key: string]: unknown;
+  };
   catalog: {
     released_albums: number;
     unreleased_collections: number;
@@ -62,9 +74,41 @@ export interface Manifest {
     total_size_bytes: number;
     total_duration_seconds: number;
   };
+  resources?: {
+    albums_index: string;
+    tracks_index: string;
+    tracker_index: string;
+    unreleased_index: string;
+    [key: string]: unknown;
+  };
+  covers?: {
+    base_url: string;
+    thumbs_url: string;
+    default_cover: string;
+  };
+  cdn: {
+    base_url: string;
+    albums_root?: string;
+    trackers_root?: string;
+  };
   albums: AlbumSummary[];
-  cdn: CdnInfo;
+  tracker_files?: {
+    released: string;
+    unreleased: string;
+  };
+  service_worker?: {
+    cache_strategy: string;
+    cached_endpoints: string[];
+    [key: string]: unknown;
+  };
+  api?: {
+    rest_entrypoint: string;
+    graphql_entrypoint: string;
+    examples: Record<string, string>;
+    [key: string]: unknown;
+  };
   integrity: {
+    hash_type?: string;
     checksums: Record<
       string,
       {
@@ -109,22 +153,23 @@ export interface Album {
 
 export interface Track {
   track_id: string;
-  title: string;
+  track_name: string;
   artist: string;
   album: string;
   album_id: string;
-  track_number: number;
+  track_position: string;
   duration_seconds: number;
-  duration_human: string;
+  duration: string;
   bit_rate_kbps: number;
   file_size_bytes: number;
   file_size: string;
   format: string;
-  sample_rate: string;
-  channels: string;
+  sample_rate?: string;
+  channels?: string;
   genre: string;
-  year: string;
-  bpm: number;
+  recorded_date: string;
+  bpm?: string;
+  bpm_numeric: number;
   explicit: boolean;
   checksum: Checksum;
   content_length: number;
@@ -164,7 +209,10 @@ export interface TrackerModule {
   linked: boolean;
   album?: string;
   albums_cdn_url?: string;
+  albums_s3_url?: string;
   tracker_cdn_url: string;
+  tracker_s3_url?: string;
+  complete_name?: string;
   linked_master?: {
     track_id: string;
     track_title: string;

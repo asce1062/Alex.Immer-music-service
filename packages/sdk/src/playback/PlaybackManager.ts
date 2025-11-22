@@ -176,7 +176,7 @@ export class PlaybackManager {
         this.preloadNextTrack();
       }
 
-      logger.debug('Playing', { title: this.state.currentTrack.title });
+      logger.debug('Playing', { title: this.state.currentTrack.track_name });
     } catch (error) {
       this.handleError(error as Error);
     }
@@ -601,7 +601,7 @@ export class PlaybackManager {
 
     const likedTrack: LikedTrack = {
       trackId: track.track_id,
-      title: track.title,
+      title: track.track_name,
       artist: track.artist,
       album: track.album,
       albumId: track.album_id,
@@ -624,7 +624,7 @@ export class PlaybackManager {
     this.emit('like', likedTrack);
     this.emit('likeschange', this.likes.tracks);
 
-    logger.debug('Liked track', { title: track.title });
+    logger.debug('Liked track', { title: track.track_name });
   }
 
   unlikeTrack(trackId: string): void {
@@ -749,7 +749,7 @@ export class PlaybackManager {
 
     const entry: ScrobbleEntry = {
       trackId: track.track_id,
-      title: track.title,
+      title: track.track_name,
       artist: track.artist,
       album: track.album,
       timestamp: new Date(),
@@ -805,7 +805,7 @@ export class PlaybackManager {
       : undefined;
 
     const metadata: MediaSessionMetadata = {
-      title: track.title,
+      title: track.track_name,
       artist: track.artist,
       album: track.album,
       artwork: [
@@ -821,10 +821,10 @@ export class PlaybackManager {
         },
       ],
       duration: this.state.duration,
-      trackNumber: track.track_number,
-      year: parseInt(track.year),
+      trackNumber: parseInt(track.track_position),
+      year: parseInt(track.recorded_date),
       genre: track.genre,
-      bpm: track.bpm,
+      bpm: track.bpm_numeric,
       explicit: track.explicit,
       position: this.state.position,
       playbackRate: this.state.playbackRate,
@@ -833,14 +833,14 @@ export class PlaybackManager {
         totalTracks: this.state.queue.length,
         nextTrack: nextTrack
           ? {
-              title: nextTrack.title,
+              title: nextTrack.track_name,
               artist: nextTrack.artist,
               artwork: nextTrack.cover_art?.thumbnail,
             }
           : undefined,
         previousTrack: previousTrack
           ? {
-              title: previousTrack.title,
+              title: previousTrack.track_name,
               artist: previousTrack.artist,
               artwork: previousTrack.cover_art?.thumbnail,
             }
@@ -924,17 +924,17 @@ export class PlaybackManager {
       },
       audioInfo: {
         bitRate: track.bit_rate_kbps,
-        sampleRate: track.sample_rate,
-        channels: track.channels,
+        sampleRate: track.sample_rate ?? 'Unknown',
+        channels: track.channels ?? 'Unknown',
         format: track.format,
       },
       metadata: {
-        title: track.title,
+        title: track.track_name,
         artist: track.artist,
         album: track.album,
-        year: track.year,
+        year: track.recorded_date,
         genre: track.genre,
-        bpm: track.bpm,
+        bpm: track.bpm_numeric,
         explicit: track.explicit,
       },
       linkedTrackers: track.linked_tracker ?? [],
@@ -1186,7 +1186,7 @@ export class PlaybackManager {
       this.nextAudio.preload = 'auto';
       this.nextAudio.load();
 
-      logger.debug('Preloaded next track', { title: nextTrack.title });
+      logger.debug('Preloaded next track', { title: nextTrack.track_name });
     }
   }
 
