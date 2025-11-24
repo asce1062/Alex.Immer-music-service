@@ -405,6 +405,10 @@ def build_master_manifest(
             "base_url": f"{cdn_base}/",
             "albums_root": f"{cdn_base}/albums/",
             "trackers_root": f"{cdn_base}/tracker/",
+            "albums_path": "albums",
+            "covers_path": "covers",
+            "metadata_path": "metadata",
+            "trackers_path": "tracker",
         },
         "albums": [],
         "tracker_files": {

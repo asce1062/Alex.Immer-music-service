@@ -67,6 +67,10 @@ describe('MetadataAPI', () => {
       base_url: 'https://cdn.example.com',
       albums_root: 'https://cdn.example.com/albums/',
       trackers_root: 'https://cdn.example.com/tracker/',
+      albums_path: 'albums',
+      covers_path: 'covers',
+      metadata_path: 'metadata',
+      trackers_path: 'tracker',
     },
     integrity: {
       checksums: {},

@@ -146,6 +146,8 @@ export class MetadataAPI {
       if (error instanceof AuthenticationError || error instanceof NetworkError) {
         throw error;
       }
+      // Log the Zod error for debugging
+      logger.error('Manifest validation failed', error);
       throw new NetworkError('Failed to fetch manifest', error);
     }
   }
@@ -186,6 +188,8 @@ export class MetadataAPI {
       if (error instanceof AuthenticationError || error instanceof NetworkError) {
         throw error;
       }
+      // Log the Zod error for debugging
+      logger.error('Album validation failed', error);
       throw new NetworkError('Failed to fetch albums catalog', error);
     }
   }
@@ -227,6 +231,8 @@ export class MetadataAPI {
       if (error instanceof AuthenticationError || error instanceof NetworkError) {
         throw error;
       }
+      // Log the Zod error for debugging
+      logger.error('Tracks validation failed', error);
       throw new NetworkError('Failed to fetch tracks catalog', error);
     }
   }
@@ -267,6 +273,8 @@ export class MetadataAPI {
       if (error instanceof AuthenticationError || error instanceof NetworkError) {
         throw error;
       }
+      // Log the Zod error for debugging
+      logger.error('Tracker validation failed', error);
       throw new NetworkError('Failed to fetch trackers catalog', error);
     }
   }
@@ -307,6 +315,8 @@ export class MetadataAPI {
       if (error instanceof AuthenticationError || error instanceof NetworkError) {
         throw error;
       }
+      // Log the Zod error for debugging
+      logger.error('Unreleased tracker validation failed', error);
       throw new NetworkError('Failed to fetch unreleased trackers catalog', error);
     }
   }
