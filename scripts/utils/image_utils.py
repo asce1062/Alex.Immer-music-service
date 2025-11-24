@@ -257,13 +257,14 @@ def extract_or_find_cover(
     dry_run: bool = False,
     verbose: bool = True,
 ) -> Path | None:
-    """Find existing cover or extract from first MP3 with embedded art.
+    """Find existing cover or extract from first MP3 with embedded art, or use default cover.
 
     Process:
     1. Sanitize album name to match url_safe_name format
     2. Check if cover already exists in covers directory
     3. If not, scan MP3s in album directory for embedded art
     4. Extract first found embedded art to covers directory with sanitized name
+    5. If no embedded art found, copy default-cover.png and rename to album name
 
     Args:
         album_name: Original album name (will be sanitized)
@@ -273,7 +274,7 @@ def extract_or_find_cover(
         verbose: If True, print progress messages
 
     Returns:
-        Path to cover file if found/extracted, None otherwise
+        Path to cover file if found/extracted/created, None otherwise
     """
     # Sanitize album name to match file naming convention
     # e.g., "Godom & Sodorrah" -> "Godom-and-Sodorrah"
@@ -316,6 +317,32 @@ def extract_or_find_cover(
                     return result
         except Exception:  # nosec B112 - intentionally continue on failure to try next pattern
             continue
+
+    # No embedded art found - use default cover
+    default_cover = config.covers_dir / "default-cover.png"
+    if default_cover.exists():
+        output_path = config.covers_dir / f"{safe_album_name}.png"
+
+        if verbose:
+            print(f"    No embedded cover found, using default cover: {output_path.name}")
+
+        if not dry_run:
+            try:
+                import shutil
+
+                # Copy default cover to album-specific name
+                shutil.copy2(default_cover, output_path)
+                if verbose:
+                    print(f"    Copied default cover to {output_path.name}")
+                return output_path
+            except Exception as e:
+                if verbose:
+                    print(f"    Error copying default cover: {e}")
+                return None
+        else:
+            if verbose:
+                print(f"    Would copy default cover to {output_path.name}")
+            return output_path
 
     return None
 

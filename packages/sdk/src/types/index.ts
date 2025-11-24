@@ -90,6 +90,10 @@ export interface Manifest {
     base_url: string;
     albums_root?: string;
     trackers_root?: string;
+    albums_path?: string;
+    covers_path?: string;
+    metadata_path?: string;
+    trackers_path?: string;
   };
   albums: AlbumSummary[];
   tracker_files?: {
@@ -124,19 +128,19 @@ export interface Album {
   album_id: string;
   album: string;
   artist: string;
-  year: number;
+  year?: number;
   total_tracks: number;
   released: boolean;
-  duration: string;
-  duration_seconds: number;
-  file_size_bytes: number;
-  file_size_human: string;
-  bpm_range: {
+  duration?: string;
+  duration_seconds?: number;
+  file_size_bytes?: number;
+  file_size_human?: string;
+  bpm_range?: {
     min: number;
     max: number;
     avg: number;
   };
-  genre: string;
+  genre?: string;
   description?: string;
   tags: string[];
   cdn_cover_url: string;
@@ -144,8 +148,8 @@ export interface Album {
   cdn_thumbnail_url: string;
   s3_thumbnail_url: string;
   explicit: boolean;
-  checksum: Checksum & { covers?: string[] };
-  last_modified: string;
+  checksum?: Checksum & { covers?: string[] };
+  last_modified?: string;
   tracks: string[];
   cover: string;
   thumbnail: string;
@@ -157,7 +161,7 @@ export interface Track {
   artist: string;
   album: string;
   album_id: string;
-  track_position: string;
+  track_position?: string;
   duration_seconds: number;
   duration: string;
   bit_rate_kbps: number;
@@ -166,7 +170,7 @@ export interface Track {
   format: string;
   sample_rate?: string;
   channels?: string;
-  genre: string;
+  genre?: string;
   recorded_date: string;
   bpm?: string;
   bpm_numeric: number;
@@ -197,7 +201,7 @@ export interface TrackerModule {
   tracker_tools?: string[];
   channels: number;
   patterns: number;
-  instruments: number;
+  instruments?: number;
   samples?: number;
   song_name?: string;
   checksum: Checksum;
