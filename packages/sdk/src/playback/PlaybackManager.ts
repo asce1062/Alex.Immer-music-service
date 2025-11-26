@@ -1162,8 +1162,7 @@ export class PlaybackManager {
   }
 
   private updateQueueState(): void {
-    this.state.hasNext =
-      this.state.queuePosition < this.state.queue.length - 1 || this.state.repeat === 'all';
+    this.state.hasNext = this.state.queuePosition < this.state.queue.length - 1;
     this.state.hasPrevious = this.state.queuePosition > 0;
   }
 
