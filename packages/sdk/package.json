@@ -1,6 +1,6 @@
 {
   "name": "@asce1062/music-service-sdk",
-  "version": "1.0.0-beta.14",
+  "version": "1.0.0-beta.15",
   "description": "Official TypeScript/JavaScript SDK for Alex.Immer Music Service API",
   "type": "module",
   "main": "./dist/index.cjs",
